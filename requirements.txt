@@ -1,0 +1,13 @@
+
+moexalgo
+
+pandas
+numpy
+
+TA-Lib
+
+# Визуализация
+plotly
+
+python-telegram-bot
+python-dotenv
