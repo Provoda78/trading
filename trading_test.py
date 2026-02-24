@@ -5,7 +5,7 @@ from moexalgo import Ticker
 from datetime import datetime, timedelta
 
 # --- БЛОК 1: ЗАГРУЗКА ДАННЫХ ---
-def get_moex_data(ticker_symbol, days=2, tf='15m'):
+def get_moex_data(ticker_symbol, days=2, tf='15min'):
     print(f"Загрузка данных для {ticker_symbol}...")
     t = Ticker(ticker_symbol)
     
@@ -27,10 +27,43 @@ def get_moex_data(ticker_symbol, days=2, tf='15m'):
     return df
 
 # --- БЛОК 2: АНАЛИЗ PATTERNS (TA-Lib) ---
-def apply_patterns(df):
-    o, h, l, c = df['open'].values, df['high'].values, df['low'].values, df['close'].values
+def detect_custom_hammer(df, shadow_ratio=2.0, upper_limit=0.1):
+    """
+    Детекция Молота по канонам Морриса.
+    shadow_ratio: во сколько раз нижняя тень больше тела (минимум).
+    upper_limit: какой процент от тела может составлять верхняя тень (максимум).
+    """
+    # 1. Считаем базовые параметры свечи
+    body = abs(df['close'] - df['open'])
+    lower_shadow = df[['open', 'close']].min(axis=1) - df['low']
+    upper_shadow = df['high'] - df[['open', 'close']].max(axis=1)
     
-    # Добавляем 4 мощных паттерна
+    # 2. Условие: Нижняя тень в 2-3 раза больше тела
+    # Добавляем небольшое смещение (1e-5), чтобы избежать деления на ноль у доджи
+    cond1 = lower_shadow >= (body * shadow_ratio)
+    
+    # 3. Условие: Верхней тени практически нет
+    cond2 = upper_shadow <= (body * upper_limit)
+    
+    # 4. Условие: Тело не должно быть нулевым (опционально, но для Молота важно)
+    cond3 = body > 0
+
+    # Объединяем всё в одну колонку (100 для совместимости с твоим кодом графиков)
+    df['custom_hammer'] = 0
+    df.loc[cond1 & cond2 & cond3, 'custom_hammer'] = 100
+    
+    return df
+
+
+def apply_patterns(df):
+    # Принудительно конвертируем в float64 (double)
+    # Это решает проблему "input array type is not double"
+    o = df['open'].astype(float).values
+    h = df['high'].astype(float).values
+    l = df['low'].astype(float).values
+    c = df['close'].astype(float).values
+    
+    # Теперь TA-Lib примет эти данные без ошибок
     df['hammer'] = talib.CDLHAMMER(o, h, l, c)
     df['engulfing'] = talib.CDLENGULFING(o, h, l, c)
     df['shooting_star'] = talib.CDLSHOOTINGSTAR(o, h, l, c)
