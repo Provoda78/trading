@@ -5,7 +5,7 @@ from moexalgo import Ticker
 from datetime import datetime, timedelta
 
 # --- БЛОК 1: ЗАГРУЗКА ДАННЫХ ---
-def get_moex_data(ticker_symbol, days=2, tf='15min'):
+def get_moex_data(ticker_symbol, days=7, tf='10min'):
     print(f"Загрузка данных для {ticker_symbol}...")
     t = Ticker(ticker_symbol)
     
@@ -27,31 +27,82 @@ def get_moex_data(ticker_symbol, days=2, tf='15min'):
     return df
 
 # --- БЛОК 2: АНАЛИЗ PATTERNS (TA-Lib) ---
-def detect_custom_hammer(df, shadow_ratio=2.0, upper_limit=0.1):
-    """
-    Детекция Молота по канонам Морриса.
-    shadow_ratio: во сколько раз нижняя тень больше тела (минимум).
-    upper_limit: какой процент от тела может составлять верхняя тень (максимум).
-    """
-    # 1. Считаем базовые параметры свечи
-    body = abs(df['close'] - df['open'])
-    lower_shadow = df[['open', 'close']].min(axis=1) - df['low']
-    upper_shadow = df['high'] - df[['open', 'close']].max(axis=1)
-    
-    # 2. Условие: Нижняя тень в 2-3 раза больше тела
-    # Добавляем небольшое смещение (1e-5), чтобы избежать деления на ноль у доджи
-    cond1 = lower_shadow >= (body * shadow_ratio)
-    
-    # 3. Условие: Верхней тени практически нет
-    cond2 = upper_shadow <= (body * upper_limit)
-    
-    # 4. Условие: Тело не должно быть нулевым (опционально, но для Молота важно)
-    cond3 = body > 0
+import pandas as pd
+import numpy as np
 
-    # Объединяем всё в одну колонку (100 для совместимости с твоим кодом графиков)
-    df['custom_hammer'] = 0
-    df.loc[cond1 & cond2 & cond3, 'custom_hammer'] = 100
+import pandas as pd
+import numpy as np
+
+def detect_manual_patterns(df):
+    # --- БАЗОВЫЕ РАСЧЕТЫ ---
+    df['body_top'] = df[['open', 'close']].max(axis=1)
+    df['body_bottom'] = df[['open', 'close']].min(axis=1)
+    df['body_size'] = abs(df['close'] - df['open'])
+    df['range'] = df['high'] - df['low']
+    df['midpoint'] = (df['open'] + df['close']) / 2
     
+    # Тени
+    df['lower_shadow'] = df['body_bottom'] - df['low']
+    df['upper_shadow'] = df['high'] - df['body_top']
+
+    # Сдвиги для предыдущей свечи
+    prev_body_top = df['body_top'].shift(1)
+    prev_body_bottom = df['body_bottom'].shift(1)
+    prev_body_size = df['body_size'].shift(1)
+    prev_close = df['close'].shift(1)
+    prev_open = df['open'].shift(1)
+    prev_midpoint = df['midpoint'].shift(1)
+
+    # --- 1. ДОДЖИ (DOJI) ---
+    df['m_doji'] = df['body_size'] <= (df['range'] * 0.1)
+
+    # --- 2. ПОГЛОЩЕНИЕ (ENGULFING) ---
+    bullish_engulfing = ((df['close'] > df['open']) & (prev_close < prev_open) & 
+                         (df['body_top'] >= prev_body_top) & (df['body_bottom'] <= prev_body_bottom) & (df['body_size'] > prev_body_size))
+    bearish_engulfing = ((df['close'] < df['open']) & (prev_close > prev_open) & 
+                         (df['body_top'] >= prev_body_top) & (df['body_bottom'] <= prev_body_bottom) & (df['body_size'] > prev_body_size))
+
+    # --- 3. ХАРАМИ (HARAMI) ---
+    bullish_harami = ((df['close'] > df['open']) & (prev_close < prev_open) &
+                      (df['body_top'] <= prev_body_top) & (df['body_bottom'] >= prev_body_bottom) & (df['body_size'] < prev_body_size))
+    bearish_harami = ((df['close'] < df['open']) & (prev_close > prev_open) &
+                      (df['body_top'] <= prev_body_top) & (df['body_bottom'] >= prev_body_bottom) & (df['body_size'] < prev_body_size))
+
+    # --- 4. МОЛОТЫ (HAMMERS) ---
+    # Обычный молот: нижняя тень > 2 тел, верхняя < 0.2 тела
+    df['signal_hammer'] = ((df['lower_shadow'] >= df['body_size'] * 2) & 
+                           (df['upper_shadow'] <= df['body_size'] * 0.2) & 
+                           (df['body_size'] > 0))
+    
+    # Перевернутый молот: верхняя тень > 2 тел, нижняя < 0.2 тела
+    df['signal_inv_hammer'] = ((df['upper_shadow'] >= df['body_size'] * 2) & 
+                               (df['lower_shadow'] <= df['body_size'] * 0.2) & 
+                               (df['body_size'] > 0))
+
+    # --- 5. ТЕМНЫЕ ОБЛАКА И ПРОСВЕТ В ОБЛАКАХ ---
+    # Темные облака (Медвежий разворот)
+    dark_cloud = (
+        (prev_close > prev_open) &  # Предыдущая - зеленая (бычья)
+        (df['close'] < df['open']) &  # Текущая - красная (медвежья)
+        (df['open'] >= prev_close) &  # Открылась не ниже закрытия прошлой
+        (df['close'] < prev_midpoint) & # Закрылась НИЖЕ середины прошлой
+        (df['close'] >= prev_open)      # Но не перекрыла её полностью (иначе это Поглощение)
+    )
+
+    # Просвет в облаках (Бычий разворот - пара для Темных облаков)
+    piercing_line = (
+        (prev_close < prev_open) &  # Предыдущая - красная
+        (df['close'] > df['open']) &  # Текущая - зеленая
+        (df['open'] <= prev_close) &  # Открылась не выше закрытия прошлой
+        (df['close'] > prev_midpoint) & # Закрылась ВЫШЕ середины прошлой
+        (df['close'] <= prev_open)      # Не перекрыла полностью
+    )
+
+    # --- ЗАПИСЬ СИГНАЛОВ ---
+    df['signal_engulfing'] = np.where(bullish_engulfing, 100, np.where(bearish_engulfing, -100, 0))
+    df['signal_harami'] = np.where(bullish_harami, 100, np.where(bearish_harami, -100, 0))
+    df['signal_clouds'] = np.where(piercing_line, 100, np.where(dark_cloud, -100, 0)) # 100=Просвет, -100=Темные облака
+
     return df
 
 
@@ -71,42 +122,68 @@ def apply_patterns(df):
     
     return df
 
-# --- БЛОК 3: ВИЗУАЛИЗАЦИЯ ---
+# --- БЛОК 3: ВИЗУАЛИЗАЦИЯ (Адаптировано под ручные паттерны Морриса) ---
 def plot_results(df, ticker):
     fig = go.Figure(data=[go.Candlestick(
         x=df['datetime'], open=df['open'], high=df['high'],
         low=df['low'], close=df['close'], name='Свечи'
     )])
 
-    # Словарь настроек: паттерн -> (цвет, символ, позиция)
-    marks = {
-        'hammer': ('blue', 'circle', 'low'),
-        'engulfing': ('green', 'triangle-up', 'low'),
-        'shooting_star': ('orange', 'triangle-down', 'high'),
-        'morning_star': ('gold', 'star', 'low')
-    }
+    # 1. Доджи
+    dojis = df[df['m_doji']]
+    if not dojis.empty:
+        fig.add_trace(go.Scatter(x=dojis['datetime'], y=dojis['high']*1.001, mode='markers',
+                      marker=dict(symbol='cross', size=8, color='gray'), name='Doji'))
 
-    for p, (color, symbol, pos) in marks.items():
-        # Бычьи (100)
-        up = df[df[p] > 0]
-        if not up.empty:
-            fig.add_trace(go.Scatter(x=up['datetime'], y=up[pos]*0.999, mode='markers',
-                          marker=dict(symbol=symbol, size=12, color=color), name=f'Bull {p}'))
-        # Медвежьи (-100)
-        down = df[df[p] < 0]
-        if not down.empty:
-            fig.add_trace(go.Scatter(x=down['datetime'], y=down[pos]*1.001, mode='markers',
-                          marker=dict(symbol=symbol, size=12, color='red'), name=f'Bear {p}'))
+    # 2. Поглощение (Большие треугольники)
+    for val, color, symbol, pos in [(100, 'green', 'triangle-up', 'low'), (-100, 'red', 'triangle-down', 'high')]:
+        mask = df[df['signal_engulfing'] == val]
+        if not mask.empty:
+            y_val = mask[pos]*0.999 if pos == 'low' else mask[pos]*1.001
+            fig.add_trace(go.Scatter(x=mask['datetime'], y=y_val, mode='markers',
+                          marker=dict(symbol=symbol, size=14, color=color), name=f'Engulfing {val}'))
 
-    fig.update_layout(title=f'Тест паттернов {ticker} (15m)', xaxis_rangeslider_visible=False)
+    # 3. Харами (Кружки)
+    for val, color, pos in [(100, 'lightgreen', 'low'), (-100, 'orange', 'high')]:
+        mask = df[df['signal_harami'] == val]
+        if not mask.empty:
+            y_val = mask[pos]*0.999 if pos == 'low' else mask[pos]*1.001
+            fig.add_trace(go.Scatter(x=mask['datetime'], y=y_val, mode='markers',
+                          marker=dict(symbol='circle', size=10, color=color), name=f'Harami {val}'))
+
+    # 4. Молоты (Квадраты снизу/сверху)
+    hammers = df[df['signal_hammer']]
+    if not hammers.empty:
+        fig.add_trace(go.Scatter(x=hammers['datetime'], y=hammers['low']*0.998, mode='markers',
+                      marker=dict(symbol='square', size=10, color='blue'), name='Hammer'))
+        
+    inv_hammers = df[df['signal_inv_hammer']]
+    if not inv_hammers.empty:
+        # Перевернутый молот тоже бычий сигнал (часто), рисуем под свечой
+        fig.add_trace(go.Scatter(x=inv_hammers['datetime'], y=inv_hammers['low']*0.998, mode='markers',
+                      marker=dict(symbol='square', size=10, color='lightblue'), name='Inv Hammer'))
+
+    # 5. Темные облака / Просвет в облаках (Ромбы)
+    for val, color, pos, name in [(100, 'cyan', 'low', 'Piercing Line'), (-100, 'purple', 'high', 'Dark Cloud')]:
+        mask = df[df['signal_clouds'] == val]
+        if not mask.empty:
+            y_val = mask[pos]*0.998 if pos == 'low' else mask[pos]*1.002
+            fig.add_trace(go.Scatter(x=mask['datetime'], y=y_val, mode='markers',
+                          marker=dict(symbol='diamond', size=12, color=color), name=name))
+
+    fig.update_layout(title=f'Моррис: Ручные паттерны (15m) | {ticker}', xaxis_rangeslider_visible=False, height=800)
     fig.show()
 
 # --- ЗАПУСК ---
 if __name__ == "__main__":
-    # Используй актуальный тикер (например, SiH6 для марта 2026)
-    TICKER_NAME = 'SiH6' 
+    TICKER_NAME = 'SiH6' # Убедись, что тикер актуальный!
+    
+    # 1. Получаем данные
     data = get_moex_data(TICKER_NAME)
     
     if data is not None:
-        data = apply_patterns(data)
+        # 2. Ищем паттерны вручную по Моррису
+        data = detect_manual_patterns(data)
+        
+        # 3. Рисуем график
         plot_results(data, TICKER_NAME)
