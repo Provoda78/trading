@@ -176,7 +176,7 @@ def plot_results(df, ticker):
 
 # --- ЗАПУСК ---
 if __name__ == "__main__":
-    TICKER_NAME = 'SiH6' # Убедись, что тикер актуальный!
+    TICKER_NAME = 'BRH6' # Убедись, что тикер актуальный!
     
     # 1. Получаем данные
     data = get_moex_data(TICKER_NAME)
