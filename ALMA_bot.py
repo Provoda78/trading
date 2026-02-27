@@ -13,8 +13,8 @@ import logging
 # ============================================================
 # НАСТРОЙКИ
 # ============================================================
-TELEGRAM_TOKEN  = "8687255977:AAGIA51KSFbWord-vIqz7pPju2xIo3ojjjU"
-TELEGRAM_CHAT_ID = "1316279449"
+TELEGRAM_TOKEN  = "YOUR_TELEGRAM_BOT_TOKEN"
+TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
 
 TICKER_NAME     = 'BRH6'
 TIMEFRAME       = '15min'         # таймфрейм свечи

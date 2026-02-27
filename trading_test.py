@@ -8,8 +8,8 @@ from moexalgo import Ticker
 from datetime import datetime, timedelta
 
 # --- КОНФИГУРАЦИЯ ---
-TOKEN = "8765910215:AAEPaq25irVjG4aEmN0Kl77XoI4IYJ50hcs"
-CHAT_ID = "1316279449"
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
 
 # Список инструментов и таймфреймов
 TICKERS = ['SiH6', 'BRH6', 'NGG6', 'MXH6'] 
