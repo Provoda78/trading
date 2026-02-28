@@ -8,8 +8,8 @@ import requests
 import time
 
 # --- НАСТРОЙКИ ---
-TOKEN = ""
-CHAT_ID = ""
+TOKEN = "8765910215:AAEPaq25irVjG4aEmN0Kl77XoI4IYJ50hcs"
+CHAT_ID = "5595690153"
 
 def create_screenshot(df, ticker, tf, pattern_name, signal_time):
     """

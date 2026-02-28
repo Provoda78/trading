@@ -92,3 +92,56 @@
 27.02.2026 01:33:34 | INFO | ⏳ До закрытия свечи: 11:26 мин
 27.02.2026 01:34:34 | INFO | ⏳ До закрытия свечи: 10:26 мин
 27.02.2026 11:11:17 | INFO | 🚀 Бот запущен | Тикер: BRH6 | Таймфрейм: 15min
+28.02.2026 19:11:22 | INFO | 🚀 Бот запущен | Тикер: BRH6 | Таймфрейм: 15min
+28.02.2026 19:11:22 | ERROR | ❌ Ошибка отправки текста: 404 Client Error: Not Found for url: https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN/sendMessage
+28.02.2026 19:11:22 | INFO | ⏳ До закрытия свечи: 03:38 мин
+28.02.2026 19:12:22 | INFO | ⏳ До закрытия свечи: 02:38 мин
+28.02.2026 19:13:22 | INFO | ⏳ До закрытия свечи: 01:38 мин
+28.02.2026 19:14:22 | INFO | ⏳ До закрытия свечи: 00:38 мин
+28.02.2026 19:14:45 | INFO | ⏳ Ожидание закрытия свечи через 15 сек...
+28.02.2026 19:15:03 | INFO | 📥 Загрузка данных с MOEX...
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/securities/BRH6.json "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=0 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=500 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=1000 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=1500 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=2000 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=2500 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=3000 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=3500 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=4000 "HTTP/1.1 200 OK"
+28.02.2026 19:15:04 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=4500 "HTTP/1.1 200 OK"
+28.02.2026 19:15:05 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=5000 "HTTP/1.1 200 OK"
+28.02.2026 19:15:05 | INFO | HTTP Request: GET https://iss.moex.com/iss/engines/futures/markets/forts/boards/RFUD/securities/BRH6/candles.json?from=2026-02-21T19%3A15%3A04.026479&till=2026-02-28T19%3A15%3A04.026479&interval=1&start=5027 "HTTP/1.1 200 OK"
+28.02.2026 19:15:05 | INFO | 🔔 Новый сигнал: BUY @ 2026-02-28 18:30:00
+28.02.2026 19:15:05 | ERROR | ⚠️ Ошибка в основном цикле: 
+Image export using the "kaleido" engine requires the Kaleido package,
+which can be installed using pip:
+
+    $ pip install --upgrade kaleido
+Traceback (most recent call last):
+  File "/home/oleg/Документы/trading/ALMA_bot.py", line 272, in run_bot
+    img  = build_chart(df, TICKER_NAME, check_idx, sig_type)
+  File "/home/oleg/Документы/trading/ALMA_bot.py", line 133, in build_chart
+    return fig.to_image(format='png', scale=1.5)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/oleg/Документы/trading/.venv/lib/python3.13/site-packages/plotly/basedatatypes.py", line 3801, in to_image
+    return pio.to_image(self, *args, **kwargs)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/oleg/Документы/trading/.venv/lib/python3.13/site-packages/plotly/io/_kaleido.py", line 345, in to_image
+            raise ValueError(
+    ...<6 lines>...
+            )
+ValueError: 
+Image export using the "kaleido" engine requires the Kaleido package,
+which can be installed using pip:
+
+    $ pip install --upgrade kaleido
+
+28.02.2026 19:15:05 | INFO | Повтор через 15 сек...
+28.02.2026 19:15:20 | INFO | ⏳ До закрытия свечи: 14:40 мин
+28.02.2026 19:16:20 | INFO | ⏳ До закрытия свечи: 13:40 мин
+28.02.2026 19:17:20 | INFO | ⏳ До закрытия свечи: 12:40 мин
+28.02.2026 19:18:20 | INFO | ⏳ До закрытия свечи: 11:40 мин
+28.02.2026 19:19:20 | INFO | ⏳ До закрытия свечи: 10:40 мин
+28.02.2026 19:19:39 | INFO | 🛑 Бот остановлен пользователем
