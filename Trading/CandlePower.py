@@ -47,6 +47,19 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
                 
     return pd.DataFrame()
 
+def small_bodies(df):
+    #df = df.copy()
+    
+    #df['body_size'] = abs(df['close'] - df['open'])
+    
+    def count_bigger(x):
+        current_body = x.iloc[-1]
+        previous_bodies = x.iloc[:-1]
+        bigger_count = (previous_bodies > current_body).sum()
+        return bigger_count
+    
+    df['is_small_body'] = df['body_size'].rolling(window=11).apply(count_bigger, raw=False) >= 5
+    
 def detect_patterns(df):
     
     signals = {
@@ -75,6 +88,8 @@ def detect_patterns(df):
     
     df['rsi'] = ta.rsi(df['close'], length=14)
     df['sma_200'] = ta.sma(df['close'], length=200)
+    
+    small_bodies(df)
     
     #Бычьего поглощения (Bullish Engulfing)
     df['bullish_engulfing'] = (
@@ -106,7 +121,8 @@ def detect_patterns(df):
         (df['upper_shadow'] <= df['body_size'] * 1) & 
         (df['body_size'] > 0) &
         (df['confirmed_bull']) &
-        (df['rsi'] > 35)                
+        (df['rsi'] > 35)&
+        (df['is_small_body'])                
     )
     
     signals['hammer'] = df[df['hammer'] == True]['datetime'].tolist()
@@ -122,7 +138,7 @@ def save_pattern_plot(plot_df, ticker_name):
     plot_df['datetime'] = pd.to_datetime(plot_df['datetime'])
     plot_df.set_index('datetime', inplace=True)
     
-    plot_df['marker'] = np.nan
+    plot_df['marker_up'] = np.nan
     plot_df['marker_down'] = np.nan
 
     condition = (plot_df['close'] > 0) # Здесь подставь свое условие паттерна
@@ -157,7 +173,7 @@ def save_pattern_plot(plot_df, ticker_name):
 
 if __name__ == "__main__":
 
-    df = get_candles("SBER", tf="1D", days_needed=50)
+    df = get_candles("GAZP", tf="1D", days_needed=50)
 
     found = detect_patterns(df)
     if found:
@@ -166,5 +182,4 @@ if __name__ == "__main__":
     else:
         print("На данном отрезке паттернов Поглощения не обнаружено.")
 
-    save_pattern_plot(df, "SBER")
-
+    save_pattern_plot(df, "GAZP")
