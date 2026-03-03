@@ -47,7 +47,7 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
                 
     return pd.DataFrame()
 
-def small_bodies(df):
+def size_bodies(df):
     #df = df.copy()
     
     #df['body_size'] = abs(df['close'] - df['open'])
@@ -58,9 +58,28 @@ def small_bodies(df):
         bigger_count = (previous_bodies > current_body).sum()
         return bigger_count
     
-    df['is_small_body'] = df['body_size'].rolling(window=11).apply(count_bigger, raw=False) >= 5
+    def count_smaller(x):
+        current_body = x.iloc[-1]
+        previous_bodies = x.iloc[:-1]
+        bigger_count = (previous_bodies < current_body).sum()
+        return bigger_count
     
-def detect_patterns(df):
+    df['is_small_body'] = df['body_size'].rolling(window=11).apply(count_bigger, raw=False) >= 6
+    df['is_big_body'] = df['body_size'].rolling(window=11).apply(count_smaller, raw=False) >= 6
+    
+def trend(df, window=10):
+    df['sma_trend'] = df['close'].rolling(window=window).mean()
+    
+    df['sma_up'] = df['sma_trend'] > df['sma_trend'].shift(1)
+    df['sma_down'] = df['sma_trend'] < df['sma_trend'].shift(1)
+    
+    #df['strong_down_trend'] = (df['close'] < df['sma_trend']) & (df['sma_dir_down'])
+    #df['strong_up_trend'] = (df['close'] > df['sma_trend']) & (df['sma_dir_up'])
+    df.drop(columns=["sma_trend"], inplace=True)
+    return df
+
+
+def detect_patterns(df_copy):
     
     signals = {
         "bullish_engulfing": [],
@@ -71,61 +90,77 @@ def detect_patterns(df):
     if df.empty:
         return signals
     
-    df_copy = df.copy()
+    df_copy = df_copy.copy()
     
     #Размеры свечей
-    df['body_size'] = abs(df['close'] - df['open'])
-    df['is_bullish'] = df['close'] > df['open']
-    df['is_bearish'] = df['close'] < df['open']
+    df_copy['body_size'] = abs(df_copy['close'] - df_copy['open'])
+    df_copy['is_bullish'] = df_copy['close'] > df_copy['open']
+    df_copy['is_bearish'] = df_copy['close'] < df_copy['open']
     
     # Тени свечей
-    df['lower_shadow'] = df[['open', 'close']].min(axis=1) - df['low']
-    df['upper_shadow'] = df['high'] - df[['open', 'close']].max(axis=1)
+    df_copy['lower_shadow'] = df_copy[['open', 'close']].min(axis=1) - df_copy['low']
+    df_copy['upper_shadow'] = df_copy['high'] - df_copy[['open', 'close']].max(axis=1)
     
     #Подтверждение
-    df['confirmed_bull'] = (df['close'].shift(-1) > df['close'])
-    df['confirmed_bear'] = (df['close'].shift(-1) < df['close'])
+    df_copy['confirmed_bull'] = (df_copy['close'].shift(-1) > df_copy['close'])
+    df_copy['confirmed_bear'] = (df_copy['close'].shift(-1) < df_copy['close'])
     
-    df['rsi'] = ta.rsi(df['close'], length=14)
-    df['sma_200'] = ta.sma(df['close'], length=200)
+    df_copy['gap_down'] = (df_copy['close'] < df_copy['close'].shift(1))
+    #df_copy['gap_up'] = [df_copy['open'].shift(-1) > df_copy['close']]
     
-    small_bodies(df)
+    df_copy['rsi'] = ta.rsi(df_copy['close'], length=14)
+    
+    size_bodies(df_copy)
+    trend(df_copy)
     
     #Бычьего поглощения (Bullish Engulfing)
     df['bullish_engulfing'] = (
-        (df['is_bullish']) & 
-        (df['is_bearish'].shift(1)) & 
-        (df['open'] <= df['close'].shift(1)) & 
-        (df['close'] >= df['open'].shift(1)) &
-        (df['body_size'] > df['body_size'].shift(1)) &
-        (df['confirmed_bull'])
+        (df_copy['is_bullish']) & 
+        (df_copy['is_bearish'].shift(1)) & 
+        (df_copy['open'] <= df_copy['close'].shift(1)) & 
+        (df_copy['close'] >= df_copy['open'].shift(1)) &
+        (df_copy['body_size'] > df_copy['body_size'].shift(1)) &
+        (df_copy['confirmed_bull']) &
+        (df_copy['is_big_body']) & 
+        (df_copy['sma_down'])
     )
     
-    signals['bullish_engulfing'] = df[df['bullish_engulfing'] == True]['datetime'].tolist()
+    signals['bullish_engulfing'] = df_copy[df['bullish_engulfing'] == True]['datetime'].tolist()
     
     #Медвежьего поглощения (Bearish Engulfing)
     df['bearish_engulfing'] = (
-        (df['is_bearish']) & 
-        (df['is_bullish'].shift(1)) & 
-        (df['open'] >= df['close'].shift(1)) & 
-        (df['close'] <= df['open'].shift(1)) &
-        (df['body_size'] > df['body_size'].shift(1)) &
-        (df['confirmed_bear'])
+        (df_copy['is_bearish']) & 
+        (df_copy['is_bullish'].shift(1)) & 
+        (df_copy['open'] >= df_copy['close'].shift(1)) & 
+        (df_copy['close'] <= df_copy['open'].shift(1)) &
+        (df_copy['body_size'] > df_copy['body_size'].shift(1)) &
+        (df_copy['confirmed_bear']) &
+        (df_copy['is_big_body']) &
+        (df_copy['sma_up'])
     )
     
-    signals["bearish_engulfing"] = df[df['bearish_engulfing'] == True]['datetime'].tolist()
+    signals["bearish_engulfing"] = df_copy[df['bearish_engulfing'] == True]['datetime'].tolist()
     
     #Молот (Hammer)
     df['hammer'] = (
-        (df['lower_shadow'] >= 2 * df['body_size']) & 
-        (df['upper_shadow'] <= df['body_size'] * 1) & 
-        (df['body_size'] > 0) &
-        (df['confirmed_bull']) &
-        (df['rsi'] > 35)&
-        (df['is_small_body'])                
+        (df_copy['lower_shadow'] >= 2 * df_copy['body_size']) & 
+        (df_copy['upper_shadow'] <= df_copy['body_size'] * 1) & 
+        (df_copy['body_size'] > 0) &
+        (df_copy['confirmed_bull']) &
+        (df_copy['rsi'] > 35)&
+        (df_copy['is_small_body'])                
     )
     
-    signals['hammer'] = df[df['hammer'] == True]['datetime'].tolist()
+    df['morning_star'] = (
+        (df_copy['is_bullish'])&
+        (df_copy['sma_down'])&
+        (df_copy['is_small_body'].shift(1))&
+        (df_copy['is_bearish'].shift(2))&
+        (df_copy['is_big_body'].shift(2))&
+        (df_copy['gap_down'].shift(1))
+    )
+    
+    signals['hammer'] = df_copy[df['hammer'] == True]['datetime'].tolist()
     #Чистка
     #df_copy.drop(columns=["bearish_engulfing", 'bullish_engulfing', 'hammer', 'rsi', 'sma_200'], inplace=True)
     
@@ -143,8 +178,8 @@ def save_pattern_plot(plot_df, ticker_name):
 
     condition = (plot_df['close'] > 0) # Здесь подставь свое условие паттерна
     
-    bullish_mask = (plot_df['hammer'] == True) | (plot_df['bullish_engulfing'] == True)
-    plot_df.loc[bullish_mask, 'marker_up'] = plot_df['low'] * 0.998
+    bullish_mask = (plot_df['hammer'] == True) | (plot_df['bullish_engulfing'] == True) | (plot_df['morning_star'] == True)
+    plot_df.loc[bullish_mask, 'marker_up'] = plot_df['low'] * 0.988
 
     bearish_mask = (plot_df["bearish_engulfing"] == True)
     plot_df.loc[bearish_mask, 'marker_down'] = plot_df['high'] * 1.002
@@ -157,7 +192,7 @@ def save_pattern_plot(plot_df, ticker_name):
         apds.append(mpf.make_addplot(plot_df['marker_down'], type='scatter', markersize=100, marker='v', color='red'))
 
     # Сохраняем в файл
-    file_path = f"{ticker_name}.png"
+    file_path = f"Trading/Graf/{ticker_name}.png"
     
     mpf.plot(plot_df, 
              type='candle', 
@@ -173,13 +208,13 @@ def save_pattern_plot(plot_df, ticker_name):
 
 if __name__ == "__main__":
 
-    df = get_candles("GAZP", tf="1D", days_needed=50)
+    df = get_candles("GAZP", tf="1D", days_needed=100)
 
     found = detect_patterns(df)
     if found:
         print("Найдены паттерны Поглощения:")
         print(found)
     else:
-        print("На данном отрезке паттернов Поглощения не обнаружено.")
+        print("На данном отрезке паттернов не обнаружено.")
 
     save_pattern_plot(df, "GAZP")
