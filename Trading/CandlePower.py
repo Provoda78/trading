@@ -90,14 +90,14 @@ def detect_patterns(df_copy):
     if df.empty:
         return signals
     
-    df_copy = df_copy.copy()
+    df_copy = df.copy()
     
     #Размеры свечей
     df_copy['body_size'] = abs(df_copy['close'] - df_copy['open'])
     df_copy['is_bullish'] = df_copy['close'] > df_copy['open']
     df_copy['is_bearish'] = df_copy['close'] < df_copy['open']
     
-    # Тени свечей
+    #Тени свечей
     df_copy['lower_shadow'] = df_copy[['open', 'close']].min(axis=1) - df_copy['low']
     df_copy['upper_shadow'] = df_copy['high'] - df_copy[['open', 'close']].max(axis=1)
     
@@ -208,7 +208,7 @@ def save_pattern_plot(plot_df, ticker_name):
 
 if __name__ == "__main__":
 
-    df = get_candles("GAZP", tf="1D", days_needed=100)
+    df = get_candles("SBER", tf="1D", days_needed=100)
 
     found = detect_patterns(df)
     if found:
@@ -217,4 +217,4 @@ if __name__ == "__main__":
     else:
         print("На данном отрезке паттернов не обнаружено.")
 
-    save_pattern_plot(df, "GAZP")
+    save_pattern_plot(df, "SBER")
