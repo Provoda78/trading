@@ -85,7 +85,10 @@ class candel(ABC):
         df['confirmed_bear'] = (df['close'].shift(-1) < df['close'])
     
         df['gap_down'] = (df['close'] < df['close'].shift(1))
-        #df_copy['gap_up'] = [df_copy['open'].shift(-1) > df_copy['close']]
+        df['gap_up'] = df['open'].shift(-1) > df['close']
+        
+        df['high_body'] = df[['open', 'close']].max(axis=1)
+        df['low_body'] = df[['open', 'close']].min(axis=1)
         
         df['rsi'] = ta.rsi(df['close'], length=14)
     
@@ -185,6 +188,58 @@ class Morning_star(candel):
         (df_copy['sma_down'])
         )
         
+class Evening_star(candel):
+    def __init__(self):
+        super().__init__('Evening_Star')
+        
+    def check_pattorn(self, df: pd.DataFrame):
+        df_cope = super().parametrs(df.copy())
+        return (
+            (df_cope['is_bearish']) &
+            (df_cope['is_small_body'].shift(1)) &         
+            (df_cope['is_bullish'].shift(2)) &            
+            (df_cope['is_big_body'].shift(2)) &           
+            (df_cope['close'] < df_cope['open'].shift(2)) &     
+            (df_cope['sma_up'])&
+            (df_cope['gap_up'])                        
+        )
+
+class Bullish_harami(candel):
+    def __init__(self):
+        super().__init__('Bullish_Harami')
+        
+    def check_pattorn(self, df: pd.DataFrame):
+        d = self.parametrs(df.copy())
+        return (
+            (d['is_bearish'].shift(1)) &             
+            (d['is_bullish']) &                    
+            (d['is_big_body'].shift(1)) &           
+            (d['is_small_body']) &
+            (d['high_body'] < d['high_body'].shift(1)) &
+            (d['low_body'] > d['low_body'].shift(1)) &
+            (d['sma_down']) &                      
+            (d['confirmed_bull'])            
+        )
+
+class Bearish_harami(candel):
+    def __init__(self):
+        super().__init__('Bearish_Harami')
+        
+    def check_pattorn(self, df: pd.DataFrame):
+        d = self.parametrs(df.copy())
+        return (
+            (d['is_bullish'].shift(1)) &             
+            (d['is_bearish']) &                     
+            (d['is_big_body'].shift(1)) &
+            (d['is_small_body']) &
+            (d['high_body'] < d['high_body'].shift(1)) &
+            (d['low_body'] > d['low_body'].shift(1)) &
+            (d['sma_up']) &                         
+            (d['confirmed_bear'])                   
+        )
+
+    
+        
 #Получаем данные
 def get_candles(ticker_name, tf, days_needed=10, retries=3):
       
@@ -226,8 +281,8 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
                 
     return pd.DataFrame()
 
-patterns = (Hammer(), Bullish_engulfing(), Morning_star(), Bearish_engulfing())
-df = get_candles("GAZP", tf="1D", days_needed=100)
+patterns = (Bearish_harami(), Bullish_harami())
+df = get_candles("GAZP", tf="1D", days_needed=10)
 if not df.empty:
     for pattern in patterns:
         pattern.draw(df)
