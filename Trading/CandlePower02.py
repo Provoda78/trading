@@ -7,11 +7,51 @@ import random
 import pandas_ta as ta
 import mplfinance as mpf
 import numpy as np
+import asyncio
+from aiogram import Bot
+from aiogram.types import FSInputFile
+
+class TelegramNotifier:
+    def __init__(self, token, chat_id):
+        self.bot = Bot(token=token)
+        self.chat_id = chat_id
+
+    async def send_signal(self, pattern_name, ticker, photo_path):
+        """Отправляет фото графика с описанием паттерна"""
+        caption = f"🚨 **Найден паттерн!**\n\n📌 Акция: {ticker}\n🕯 Паттерн: {pattern_name}\n📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        # Подготовка файла для отправки в aiogram 3.x
+        photo = FSInputFile(photo_path)
+        
+        try:
+            await self.bot.send_photo(
+                chat_id=self.chat_id,
+                photo=photo,
+                caption=caption,
+                parse_mode="Markdown"
+            )
+            print(f"✅ Уведомление по {ticker} отправлено в Telegram")
+        except Exception as e:
+            print(f"❌ Ошибка отправки в Telegram: {e}")
+        finally:
+            await self.bot.session.close() # Важно закрывать сессию
+
 
 class candel(ABC):
     name: str
     def __init__(self, name):
         self.name = name
+        
+    def trend(self, df, window=10):
+        df['sma_trend'] = df['close'].rolling(window=window).mean()
+    
+        df['sma_up'] = df['sma_trend'] > df['sma_trend'].shift(1)
+        df['sma_down'] = df['sma_trend'] < df['sma_trend'].shift(1)
+    
+        #df['strong_down_trend'] = (df['close'] < df['sma_trend']) & (df['sma_down'])
+        #df['strong_up_trend'] = (df['close'] > df['sma_trend']) & (df['sma_up'])
+        df.drop(columns=["sma_trend"], inplace=True)
+        return df
         
     def size_bodies(self, df: pd.DataFrame):
     
@@ -50,7 +90,7 @@ class candel(ABC):
         df['rsi'] = ta.rsi(df['close'], length=14)
     
         self.size_bodies(df)
-        #self.trend(df)
+        self.trend(df)
         
         return df
      
@@ -59,6 +99,8 @@ class candel(ABC):
         pass
     
     def draw(self, df: pd.DataFrame):
+        
+        signals = self.check_pattorn(df)
         plot_df = df.copy()
         plot_df['datetime'] = pd.to_datetime(plot_df['datetime'])
         plot_df.set_index('datetime', inplace=True)
@@ -66,7 +108,8 @@ class candel(ABC):
         plot_df['marker_up'] = np.nan
         plot_df['marker_down'] = np.nan
         
-        plot_df.loc[self.check_pattorn(plot_df).values, 'marker_up'] = plot_df['low'] * 0.988
+        plot_df.loc[signals.values, 'marker_up'] = plot_df['low'] * 0.988
+        #plot_df.loc[signals.values, 'marker_down'] = plot_df['high'] * 1.022
         
         apds = []
         if plot_df['marker_up'].notna().any():
@@ -92,7 +135,7 @@ class Hammer(candel):
         (df_copy['body_size'] > 0) &
         (df_copy['confirmed_bull']) &
         (df_copy['is_small_body']) &
-        (df_copy['rsi']))
+        (df_copy['rsi'] < 30 ))
 
 class Bullish_engulfing(candel):
     def __init__(self):
@@ -107,8 +150,8 @@ class Bullish_engulfing(candel):
         (df_copy['close'] >= df_copy['open'].shift(1)) &
         (df_copy['body_size'] > df_copy['body_size'].shift(1)) &
         (df_copy['confirmed_bull']) &
-        (df_copy['is_big_body']) 
-        #(df_copy['sma_down'])    
+        (df_copy['is_big_body']) &
+        (df_copy['sma_down'])    
         )
         
 class Bearish_engulfing(candel):
@@ -124,7 +167,8 @@ class Bearish_engulfing(candel):
         (df_copy['close'] <= df_copy['open'].shift(1)) &
         (df_copy['body_size'] > df_copy['body_size'].shift(1)) &
         (df_copy['confirmed_bear']) &
-        (df_copy['is_big_body']))
+        (df_copy['is_big_body'])&
+        (df_copy['sma_up']))
         
 class Morning_star(candel):
     def __init__(self):
@@ -137,8 +181,8 @@ class Morning_star(candel):
         (df_copy['is_small_body'].shift(1))&
         (df_copy['is_bearish'].shift(2))&
         (df_copy['is_big_body'].shift(2))&
-        (df_copy['gap_down'].shift(1))
-        #(df_copy['sma_down'])
+        (df_copy['gap_down'].shift(1)) &
+        (df_copy['sma_down'])
         )
         
 #Получаем данные
@@ -182,12 +226,8 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
                 
     return pd.DataFrame()
 
-Hammer_ = Hammer()
-Bull = Bullish_engulfing()
-Star = Morning_star()
-df = get_candles("SBER", tf="1D", days_needed=100)
-print(Hammer_.check_pattorn(df))
+patterns = (Hammer(), Bullish_engulfing(), Morning_star(), Bearish_engulfing())
+df = get_candles("GAZP", tf="1D", days_needed=100)
 if not df.empty:
-    Hammer_.draw(df)
-    Bull.draw(df)
-    Star.draw(df)
+    for pattern in patterns:
+        pattern.draw(df)
