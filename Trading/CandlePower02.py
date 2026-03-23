@@ -115,16 +115,17 @@ class candel(ABC):
         plot_df['marker_up'] = np.nan
         plot_df['marker_down'] = np.nan
         
-        plot_df.loc[signals.values, 'marker_up'] = plot_df['low'] * 0.988
+        plot_df.loc[signals.values, 'marker_up'] = plot_df['low'] * 0.998
         #plot_df.loc[signals.values, 'marker_down'] = plot_df['high'] * 1.022
         
+        view_plot = plot_df.iloc[-30:]
         apds = []
-        if plot_df['marker_up'].notna().any():
-            apds.append(mpf.make_addplot(plot_df['marker_up'], type='scatter', 
+        if view_plot['marker_up'].notna().any():
+            apds.append(mpf.make_addplot(view_plot['marker_up'], type='scatter', 
                                          markersize=120, marker='^', color='green'))
         
         file_name = f"Trading/Graf/{self.name}_chart.png"
-        mpf.plot(plot_df, type='candle', style='charles',
+        mpf.plot(view_plot.iloc[-30:], type='candle', style='charles',
                  title=f"Pattern: {self.name}",
                  addplot=apds, savefig=file_name)
         
@@ -318,9 +319,8 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
     return pd.DataFrame()
 
 
-async def scan(tickers, patterns, time_frame='1D'):
-    
-    notifier = TelegramNotifier("8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc", 5595690153)
+async def scan(tickers, patterns, notifier, time_frame='1h'):
+
     print(f"🚀 Запуск сканера подтвержденных сигналов...")
     
     for ticker in tickers:
@@ -354,7 +354,32 @@ async def main():
         Evening_star()
     ]
     
-    await scan(my_tickers, my_patterns)
+    notifier = TelegramNotifier("8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc", 5595690153)
+    
+    print("Бот-сканер запущен в режиме сервера.")
+    print("Для ручной остановки нажмите Ctrl+C")
 
+    try:
+        while True:
+            current_time = datetime.now().strftime('%H:%M:%S')
+            print(f"[{current_time}] Начинаю плановое сканирование...")
+            
+            await scan(my_tickers, my_patterns, notifier)
+
+            wait_time = 3600 
+            print(f"Сканирование окончено. Сон {wait_time//60} мин...")
+            await asyncio.sleep(wait_time)
+            
+    except asyncio.CancelledError:
+        print("Задача сканирования отменена.")
+    except KeyboardInterrupt:
+        print("Ручная остановка.")
+    finally:
+        await notifier.bot.session.close()
+        print("Сессия бота закрыта. Бот полностью остановлен.")
+        
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
