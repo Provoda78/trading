@@ -18,7 +18,7 @@ class TelegramNotifier:
 
     async def send_signal(self, pattern_name, ticker, photo_path):
         """Отправляет фото графика с описанием паттерна"""
-        caption = f"🚨 **Найден паттерн!**\n\n📌 Акция: {ticker}\n🕯 Паттерн: {pattern_name}\n📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        caption = f"🚨 **Найден паттерн!**\n\n Акция: {ticker}\n🕯 Паттерн: {pattern_name}\n📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         
         # Подготовка файла для отправки в aiogram 3.x
         photo = FSInputFile(photo_path)
@@ -30,11 +30,11 @@ class TelegramNotifier:
                 caption=caption,
                 parse_mode="Markdown"
             )
-            print(f"✅ Уведомление по {ticker} отправлено в Telegram")
+            print(f"Уведомление по {ticker} отправлено в Telegram")
         except Exception as e:
-            print(f"❌ Ошибка отправки в Telegram: {e}")
-        finally:
-            await self.bot.session.close() # Важно закрывать сессию
+            print(f"Ошибка отправки в Telegram: {e}")
+        #finally:
+            #await self.bot.session.close() # Важно закрывать сессию
 
 
 class candel(ABC):
@@ -83,6 +83,10 @@ class candel(ABC):
         #Подтверждение
         df['confirmed_bull'] = (df['close'].shift(-1) > df['close'])
         df['confirmed_bear'] = (df['close'].shift(-1) < df['close'])
+        
+        # Середина тела
+        df['mid_body'] = (df['open'] + df['close']) / 2
+
     
         df['gap_down'] = (df['close'] < df['close'].shift(1))
         df['gap_up'] = df['open'].shift(-1) > df['close']
@@ -125,6 +129,7 @@ class candel(ABC):
                  addplot=apds, savefig=file_name)
         
         print(f"✅ График для {self.name} сохранен в {file_name}")
+        return file_name
     
 class Hammer(candel):
     def __init__(self):
@@ -238,8 +243,39 @@ class Bearish_harami(candel):
             (d['confirmed_bear'])                   
         )
 
-    
+class Dark_cloud_cover(candel):
+    def __init__(self):
+        super().__init__('Dark_Cloud_Cover')
         
+    def check_pattorn(self, df: pd.DataFrame):
+        d = super().parametrs(df.copy())
+        return (
+            (d['is_bearish']) &
+            (d['is_bullish'].shift(1)) &
+            (d['is_big_body'].shift(1)) &
+            (d['open'] > d['high'].shift(1)) &
+            (d['close'] < d['mid_body'].shift(1)) &
+            (d['close'] > d['open'].shift(1)) & 
+            (d['sma_up'])                           
+        )
+        
+class Three_white_soldiers(candel):
+    def __init__(self):
+        super().__init__('Three_White_Soldiers')
+        
+    def check_pattorn(self, df: pd.DataFrame):
+        d = super().parametrs(df.copy())
+        return (
+            (d['is_bullish']) & (d['is_bullish'].shift(1)) & (d['is_bullish'].shift(2)) &
+            (d['is_big_body']) & (d['is_big_body'].shift(1)) & (d['is_big_body'].shift(2)) &
+            (d['close'] > d['close'].shift(1)) &
+            (d['close'].shift(1) > d['close'].shift(2)) &
+            (d['open'] > d['open'].shift(1)) &
+            (d['open'] < d['close'].shift(1)) &
+            (d['upper_shadow'] < d['body_size'] * 0.2)
+        )
+
+
 #Получаем данные
 def get_candles(ticker_name, tf, days_needed=10, retries=3):
       
@@ -268,7 +304,7 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
         
         except Exception as e:
             
-            #print(f"ERROR: {e}")
+            print(f"ERROR: {e}")
             
             if "not found" in str(e) or "NoneType" in str(e):
                 print(f"[!] Тикер {ticker_name} неактивен или данные недоступны.")
@@ -281,8 +317,44 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
                 
     return pd.DataFrame()
 
-patterns = (Bearish_harami(), Bullish_harami())
-df = get_candles("GAZP", tf="1D", days_needed=10)
-if not df.empty:
-    for pattern in patterns:
-        pattern.draw(df)
+
+async def scan(tickers, patterns, time_frame='1D'):
+    
+    notifier = TelegramNotifier("8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc", 5595690153)
+    print(f"🚀 Запуск сканера подтвержденных сигналов...")
+    
+    for ticker in tickers:
+        df = get_candles(ticker, tf=time_frame, days_needed=100)
+        
+        if df.empty:
+            continue
+              
+        for pattern in patterns:
+            signals = pattern.check_pattorn(df)
+            if signals.iloc[-2] == True:
+                print(f"🚨 СИГНАЛ! {pattern.name} по {ticker}")
+                
+                chart_path = pattern.draw(df)
+                await notifier.send_signal(f"{pattern.name} (Подтвержден)", ticker, chart_path)
+        await asyncio.sleep(0.5)
+        
+    print('И всё...')
+                
+async def main():
+    my_tickers = ['SBER', 'GAZP', 'LKOH', 'NVTK', 'MGNT', 'ROSN']
+    my_patterns = [
+        Hammer(), 
+        Bullish_engulfing(),
+        Bullish_harami(),
+        Morning_star(),
+        Dark_cloud_cover(),
+        Three_white_soldiers(),
+        Bearish_engulfing(),
+        Bearish_harami(),
+        Evening_star()
+    ]
+    
+    await scan(my_tickers, my_patterns)
+
+if __name__ == "__main__":
+    asyncio.run(main())
