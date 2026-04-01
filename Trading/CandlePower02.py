@@ -13,23 +13,37 @@ from aiogram.types import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
 
 class TelegramNotifier:
-    def __init__(self, token, chat_id):
+    def __init__(self, token, timeframe_chats, main_chat_id):
         session = AiohttpSession(proxy="http://127.0.0.1:12334")
         
         # 2. Передаем сессию в объект Bot
         self.bot = Bot(token=token, session=session)
-        self.chat_id = chat_id
+        self.timeframe_chats = timeframe_chats
+        self.main_chat_id = main_chat_id
         
-    async def send_signal(self, pattern_name, ticker, photo_path):
+    async def send_signal(self, pattern_name, ticker, photo_path, timeframe):
         """Отправляет фото графика с описанием паттерна"""
-        caption = f"🚨 **Найден паттерн!**\n\n Акция: {ticker}\n🕯 Паттерн: {pattern_name}\n📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        chat_id = self.timeframe_chats.get(timeframe)
+        if not chat_id:
+            print(f"⚠️ Чат для таймфрейма {timeframe} не настроен!")
+            return
+        
+        tv_url = f"https://tradingview.com:{ticker}"
+        caption = (
+        f"🚨 <b>{pattern_name}</b> [{timeframe}]\n\n"
+        f"Акция: <b>{ticker}</b>\n"
+        f"🕒 ТФ: {timeframe}\n"
+        f"📅 {datetime.now().strftime('%d.%m %H:%M')}\n\n"
+        f"🔗 <a href='{tv_url}'>Открыть график на TradingView</a>")
         
         # Подготовка файла для отправки в aiogram 3.x
         photo = FSInputFile(photo_path)
         
         try:
             await self.bot.send_photo(
-                chat_id=self.chat_id,
+                chat_id=self.main_chat_id,
+                message_thread_id=chat_id,
                 photo=photo,
                 caption=caption,
                 parse_mode="HTML"
@@ -282,20 +296,26 @@ class Three_white_soldiers(candel):
 
 
 #Получаем данные
-def get_candles(ticker_name, tf, days_needed=10, retries=3):
-      
-    technical_need = 30
-    total_days = days_needed + technical_need
-    start_dt = (datetime.now() - timedelta(days=total_days)).strftime('%Y-%m-%d')
-    end_dt = datetime.now().strftime('%Y-%m-%d')
-    
+async def get_candles(ticker_name, interval='1h', limit = 100, retries=3):
+        
     base_delay = 2 #начальная задержка
     
     for attempt in range(retries):  
               
         try:
             tc = Ticker(ticker_name)
-            data = tc.candles(start=start_dt, end=end_dt, period=tf)
+            
+            end_date = datetime.now()
+            if interval == '1min':
+                start_date = end_date - timedelta(minutes=limit * 2) #запас, так как не учтено время биржы
+            elif interval == '15min':
+                start_date = end_date - timedelta(minutes=limit * 20)
+            elif interval == '1h':
+                start_date = end_date - timedelta(days=limit // 6)
+            else:
+                start_date = end_date - timedelta(days=limit * 2)
+                
+            data = tc.candles(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), period=interval)
 
             df = pd.DataFrame(data)
 
@@ -303,6 +323,8 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
                 print(f"[!] Данные для {ticker_name} отсутствуют (пустой ответ).")
                 return pd.DataFrame()
             
+            #Если свечей больше limit
+            df = df.tail(limit)
             df = df.rename(columns={'begin': 'datetime'})
                 
             return df
@@ -318,7 +340,7 @@ def get_candles(ticker_name, tf, days_needed=10, retries=3):
             jitter = random.uniform(0, 1) 
             wait_time = (base_delay * (2 ** attempt)) + jitter
             print(f"[*] Сбой сети при загрузке {ticker_name}. Попытка {attempt + 1}/{retries}...")
-            time.sleep(wait_time)
+            await asyncio.sleep(wait_time)
                 
     return pd.DataFrame()
 
@@ -328,7 +350,7 @@ async def scan(tickers, patterns, notifier, time_frame='1h'):
     print(f"🚀 Запуск сканера подтвержденных сигналов...")
     
     for ticker in tickers:
-        df = get_candles(ticker, tf=time_frame, days_needed=100)
+        df = await get_candles(ticker, interval=time_frame, limit=80)
         
         if df.empty:
             continue
@@ -339,12 +361,28 @@ async def scan(tickers, patterns, notifier, time_frame='1h'):
                 print(f"🚨 СИГНАЛ! {pattern.name} по {ticker}")
                 
                 chart_path = pattern.draw(df)
-                await notifier.send_signal(f"{pattern.name} (Подтвержден)", ticker, chart_path)
+                await notifier.send_signal(f"{pattern.name} (Подтвержден)", ticker, chart_path, time_frame)
         await asyncio.sleep(0.5)
         
+    print(f'{time_frame} проверен!')
+    
+async def multiscan(tickers, patterns, notifier):
+    targets = list(notifier.timeframe_chats.keys())
+    
+    tasks = []
+    for tf in targets:
+        tasks.append(scan(tickers, patterns, notifier, time_frame=tf))
+        
+    await asyncio.gather(*tasks)
     print('И всё...')
                 
 async def main():
+    Token = "8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc"
+    CHATS = {
+        '15min': 3851510557, # ID чата для 15-минут
+        '1h': 3851510557,  # ID чата для часа
+        '1D': 3851510557    # ID чата для дня
+    }
     my_tickers = ['SBER', 'GAZP', 'LKOH', 'NVTK', 'MGNT', 'ROSN', 'T', 'IMOEX']
     my_patterns = [
         Hammer(), 
@@ -358,7 +396,9 @@ async def main():
         Evening_star()
     ]
     
-    notifier = TelegramNotifier("8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc", 5595690153)
+    main_chat_id = -1003851510557
+    #notifier = TelegramNotifier("8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc", 5595690153)
+    notifier = TelegramNotifier(Token, CHATS, main_chat_id)
     
     print("Бот-сканер запущен в режиме сервера.")
     print("Для ручной остановки нажмите Ctrl+C")
@@ -368,9 +408,9 @@ async def main():
             current_time = datetime.now().strftime('%H:%M:%S')
             print(f"[{current_time}] Начинаю плановое сканирование...")
             
-            await scan(my_tickers, my_patterns, notifier, time_frame='1W')
+            await multiscan(my_tickers, my_patterns, notifier)
 
-            wait_time = 3600 
+            wait_time = 300
             print(f"Сканирование окончено. Сон {wait_time//60} мин...")
             await asyncio.sleep(wait_time)
             
