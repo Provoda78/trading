@@ -10,12 +10,16 @@ import numpy as np
 import asyncio
 from aiogram import Bot
 from aiogram.types import FSInputFile
+from aiogram.client.session.aiohttp import AiohttpSession
 
 class TelegramNotifier:
     def __init__(self, token, chat_id):
-        self.bot = Bot(token=token)
+        session = AiohttpSession(proxy="http://127.0.0.1:12334")
+        
+        # 2. Передаем сессию в объект Bot
+        self.bot = Bot(token=token, session=session)
         self.chat_id = chat_id
-
+        
     async def send_signal(self, pattern_name, ticker, photo_path):
         """Отправляет фото графика с описанием паттерна"""
         caption = f"🚨 **Найден паттерн!**\n\n Акция: {ticker}\n🕯 Паттерн: {pattern_name}\n📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -28,7 +32,7 @@ class TelegramNotifier:
                 chat_id=self.chat_id,
                 photo=photo,
                 caption=caption,
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             print(f"Уведомление по {ticker} отправлено в Telegram")
         except Exception as e:
@@ -341,7 +345,7 @@ async def scan(tickers, patterns, notifier, time_frame='1h'):
     print('И всё...')
                 
 async def main():
-    my_tickers = ['SBER', 'GAZP', 'LKOH', 'NVTK', 'MGNT', 'ROSN']
+    my_tickers = ['SBER', 'GAZP', 'LKOH', 'NVTK', 'MGNT', 'ROSN', 'T', 'IMOEX']
     my_patterns = [
         Hammer(), 
         Bullish_engulfing(),
@@ -364,7 +368,7 @@ async def main():
             current_time = datetime.now().strftime('%H:%M:%S')
             print(f"[{current_time}] Начинаю плановое сканирование...")
             
-            await scan(my_tickers, my_patterns, notifier)
+            await scan(my_tickers, my_patterns, notifier, time_frame='1W')
 
             wait_time = 3600 
             print(f"Сканирование окончено. Сон {wait_time//60} мин...")
