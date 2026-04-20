@@ -11,12 +11,13 @@ import asyncio
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
+from typing import Callable
 
 class TelegramNotifier:
     def __init__(self, token, timeframe_chats, main_chat_id):
         session = AiohttpSession(proxy="http://127.0.0.1:12334")
         
-        # 2. Передаем сессию в объект Bot
+        #Передаем сессию в объект Bot
         self.bot = Bot(token=token, session=session)
         self.timeframe_chats = timeframe_chats
         self.main_chat_id = main_chat_id
@@ -29,7 +30,7 @@ class TelegramNotifier:
             print(f"⚠️ Чат для таймфрейма {timeframe} не настроен!")
             return
         
-        tv_url = f"https://tradingview.com:{ticker}"
+        tv_url = f"https://tradingview.com/symbols/RUS-{ticker}/"
         caption = (
         f"🚨 <b>{pattern_name}</b> [{timeframe}]\n\n"
         f"Акция: <b>{ticker}</b>\n"
@@ -48,12 +49,97 @@ class TelegramNotifier:
                 caption=caption,
                 parse_mode="HTML"
             )
-            print(f"Уведомление по {ticker} отправлено в Telegram")
+            print(f"Уведомление по {ticker} отправлено в Telegram. id группы {chat_id}")
         except Exception as e:
             print(f"Ошибка отправки в Telegram: {e}")
         #finally:
             #await self.bot.session.close() # Важно закрывать сессию
 
+class Confirmation(ABC):
+    def __init__(self, weight):
+        self.weight = weight # баллы
+
+    @abstractmethod
+    async def check(self, df) -> bool:
+        pass
+    
+    @abstractmethod
+    def draw(self, df):
+        pass
+
+class MorrisConfirmation(Confirmation):
+    """Классическое подтверждение: закрытие следующей свечи выше/ниже паттерна"""
+    async def check(self, df, state) -> bool:
+        last_close = df['close'].iloc[-1]
+        prev_close = state['close']
+        
+        if state['type']:
+            return last_close > prev_close
+        return last_close < prev_close
+    
+    def draw(self, df):
+        pass
+
+class LevelConfirmation(Confirmation):
+    """Подтверждение по уровням: цена коснулась или находится рядом с S/R"""
+    async def check(self, df, state) -> bool:
+        # Здесь будет логика dist_to_support_pct < 0.3
+        dist = df['dist_to_support_pct'].iloc[-1] if state['type'] == "bullish" else df['dist_to_res_pct'].iloc[-1]
+        return dist < 0.5 
+    
+    def draw(self, df):
+        pass
+
+
+class StateManager:
+    def __init__(self):
+        # Память
+        self.pending = {}
+        # Критерии и их веса
+        self.criteria = {
+            MorrisConfirmation(weight=1): "Подтверждение по Моррису",
+            LevelConfirmation(weight=2): "Касание уровня S/R",
+        }
+
+    async def process_tick(self, ticker, tf, df, notifier):
+        key = f"{ticker}_{tf}"
+        if key not in self.pending: return
+        
+        state = self.pending[key]
+        # Уменьшаем время жизни
+        state['TTL'] -= 1
+        current_score = 0
+        achieved_new = []
+
+        for conf_obj, label in self.criteria.items():
+            if label not in state['confirmation']:
+                if await conf_obj.check(df, state):
+                    current_score += conf_obj.weight
+                    state['confirmation'].append(label)
+
+        if current_score > 0 and state['TTL'] > 0:
+            await notifier.send_confirmation_update(
+                ticker, state['pattern'], tf, current_score, state['confirmation']
+            )
+            
+        # Сигнал отработал    
+        if state['TTL'] == 0:
+            del self.pending[key]
+            
+        last_close = df['close'].iloc[-1]
+        if (state['type'] and last_close < state['close'] * 0.98) or \
+           (not state['type'] and last_close > state['close'] * 1.02):
+            print(f"Паттерн {state['pattern']} по {ticker} отменен рынком.")
+            del self.pending[key]
+
+    def add_pattern(self, ticker, time_frame, name, type: bool, data_close, lifetime=4):
+        self.pending[f"{ticker}_{time_frame}"] = {
+            'pattern': name, 
+            'type': type, 
+            'close': data_close,
+            'TTL': lifetime,
+            'confirmation': []
+            }
 
 class candel(ABC):
     name: str
@@ -97,10 +183,6 @@ class candel(ABC):
         #Тени свечей
         df['lower_shadow'] = df[['open', 'close']].min(axis=1) - df['low']
         df['upper_shadow'] = df['high'] - df[['open', 'close']].max(axis=1)
-    
-        #Подтверждение
-        df['confirmed_bull'] = (df['close'].shift(-1) > df['close'])
-        df['confirmed_bear'] = (df['close'].shift(-1) < df['close'])
         
         # Середина тела
         df['mid_body'] = (df['open'] + df['close']) / 2
@@ -160,7 +242,6 @@ class Hammer(candel):
         return ((df_copy['lower_shadow'] >= 2 * df_copy['body_size']) & 
         (df_copy['upper_shadow'] <= df_copy['body_size'] * 1) & 
         (df_copy['body_size'] > 0) &
-        (df_copy['confirmed_bull']) &
         (df_copy['is_small_body']) &
         (df_copy['rsi'] < 30 ))
 
@@ -176,7 +257,6 @@ class Bullish_engulfing(candel):
         (df_copy['open'] <= df_copy['close'].shift(1)) & 
         (df_copy['close'] >= df_copy['open'].shift(1)) &
         (df_copy['body_size'] > df_copy['body_size'].shift(1)) &
-        (df_copy['confirmed_bull']) &
         (df_copy['is_big_body']) &
         (df_copy['sma_down'])    
         )
@@ -193,7 +273,6 @@ class Bearish_engulfing(candel):
         (df_copy['open'] >= df_copy['close'].shift(1)) & 
         (df_copy['close'] <= df_copy['open'].shift(1)) &
         (df_copy['body_size'] > df_copy['body_size'].shift(1)) &
-        (df_copy['confirmed_bear']) &
         (df_copy['is_big_body'])&
         (df_copy['sma_up']))
         
@@ -241,8 +320,7 @@ class Bullish_harami(candel):
             (d['is_small_body']) &
             (d['high_body'] < d['high_body'].shift(1)) &
             (d['low_body'] > d['low_body'].shift(1)) &
-            (d['sma_down']) &                      
-            (d['confirmed_bull'])            
+            (d['sma_down'])                         
         )
 
 class Bearish_harami(candel):
@@ -258,8 +336,7 @@ class Bearish_harami(candel):
             (d['is_small_body']) &
             (d['high_body'] < d['high_body'].shift(1)) &
             (d['low_body'] > d['low_body'].shift(1)) &
-            (d['sma_up']) &                         
-            (d['confirmed_bear'])                   
+            (d['sma_up'])                  
         )
 
 class Dark_cloud_cover(candel):
@@ -345,7 +422,7 @@ async def get_candles(ticker_name, interval='1h', limit = 100, retries=3):
     return pd.DataFrame()
 
 
-async def scan(tickers, patterns, notifier, time_frame='1h'):
+async def scan(tickers, patterns_dict, notifier, state_manager: StateManager, time_frame='1h'):
 
     print(f"🚀 Запуск сканера подтвержденных сигналов...")
     
@@ -355,23 +432,33 @@ async def scan(tickers, patterns, notifier, time_frame='1h'):
         if df.empty:
             continue
               
-        for pattern in patterns:
+        await state_manager.process_tick(ticker, time_frame, df, notifier)
+              
+        for pattern, p_type in patterns_dict.items():
             signals = pattern.check_pattorn(df)
-            if signals.iloc[-2] == True:
+            if signals.iloc[-1]:
+                if f"{ticker}_{time_frame}" in state_manager.pending:
+                    continue 
                 print(f"🚨 СИГНАЛ! {pattern.name} по {ticker}")
                 
                 chart_path = pattern.draw(df)
-                await notifier.send_signal(f"{pattern.name} (Подтвержден)", ticker, chart_path, time_frame)
+                await notifier.send_signal(f"{pattern.name} (Не подтвержден)", ticker, chart_path, time_frame)
+                
+                state_manager.add_pattern(
+                    ticker, time_frame, pattern.name, p_type, df.iloc[-1]['close'], lifetime=4
+                )
+                
         await asyncio.sleep(0.5)
         
     print(f'{time_frame} проверен!')
     
-async def multiscan(tickers, patterns, notifier):
+async def multiscan(tickers, patterns_dict, notifier):
     targets = list(notifier.timeframe_chats.keys())
+    state_manager = StateManager()
     
     tasks = []
     for tf in targets:
-        tasks.append(scan(tickers, patterns, notifier, time_frame=tf))
+        tasks.append(scan(tickers, patterns_dict, notifier, state_manager, time_frame=tf))
         
     await asyncio.gather(*tasks)
     print('И всё...')
@@ -379,22 +466,22 @@ async def multiscan(tickers, patterns, notifier):
 async def main():
     Token = "8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc"
     CHATS = {
-        '15min': 3851510557, # ID чата для 15-минут
-        '1h': 3851510557,  # ID чата для часа
-        '1D': 3851510557    # ID чата для дня
+        '15min': 2, # ID чата для 15-минут
+        '1h': 3,  # ID чата для часа
+        '1D': 4    # ID чата для дня
     }
     my_tickers = ['SBER', 'GAZP', 'LKOH', 'NVTK', 'MGNT', 'ROSN', 'T', 'IMOEX']
-    my_patterns = [
-        Hammer(), 
-        Bullish_engulfing(),
-        Bullish_harami(),
-        Morning_star(),
-        Dark_cloud_cover(),
-        Three_white_soldiers(),
-        Bearish_engulfing(),
-        Bearish_harami(),
-        Evening_star()
-    ]
+    my_patterns_dict = {
+        Hammer(): True, 
+        Bullish_engulfing(): True,
+        Bullish_harami(): True,
+        Morning_star(): True,
+        Dark_cloud_cover(): False,
+        Three_white_soldiers(): True,
+        Bearish_engulfing(): False,
+        Bearish_harami(): False,
+        Evening_star(): False
+    }
     
     main_chat_id = -1003851510557
     #notifier = TelegramNotifier("8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc", 5595690153)
@@ -408,7 +495,7 @@ async def main():
             current_time = datetime.now().strftime('%H:%M:%S')
             print(f"[{current_time}] Начинаю плановое сканирование...")
             
-            await multiscan(my_tickers, my_patterns, notifier)
+            await multiscan(my_tickers, my_patterns_dict, notifier)
 
             wait_time = 300
             print(f"Сканирование окончено. Сон {wait_time//60} мин...")
