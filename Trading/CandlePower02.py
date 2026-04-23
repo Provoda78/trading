@@ -54,6 +54,44 @@ class TelegramNotifier:
             print(f"Ошибка отправки в Telegram: {e}")
         #finally:
             #await self.bot.session.close() # Важно закрывать сессию
+            
+            
+            
+    async def send_confirmation_update(self, ticker, pattern, tf, score, confirmations, file):
+        chat_id = self.timeframe_chats.get(tf)
+        if not chat_id:
+            print(f"⚠️ Чат для таймфрейма {tf} не настроен!")
+            return
+        
+        tv_url = f"https://tradingview.com:{ticker}"
+        conf_list = "\n".join([f"✅ {c}" for c in confirmations])
+        
+        caption = (
+            f"⚡️ <b>ПОДТВЕРЖДЕНИЕ СИГНАЛА</b>\n\n"
+            f"Акция: <b>{ticker}</b>\n"
+            f"Паттерн: {pattern}\n"
+            f"Таймфрейм: {tf}\n\n"
+            f"📊 <b>Баллы: {score}</b>\n"
+            f"———————————————\n"
+            f"{conf_list}\n"
+            f"———————————————\n\n"
+            f"🔗 <a href='{tv_url}'>График TradingView</a>"
+        )
+        
+        thread_id = self.timeframe_chats.get(tf, 1)
+
+        try:
+            photo = FSInputFile(file)
+            await self.bot.send_photo(
+                chat_id=self.main_chat_id,
+                message_thread_id=thread_id,
+                photo=photo,
+                caption=caption,
+                parse_mode="HTML"
+            )
+            print(f"🚀 Подтверждение по {ticker} ({score} б.) отправлен в тему {thread_id}")
+        except Exception as e:
+            print(f"❌ Ошибка отправки подтверждения: {e}")
 
 class Confirmation(ABC):
     def __init__(self, weight):
@@ -68,7 +106,7 @@ class Confirmation(ABC):
         pass
 
 class MorrisConfirmation(Confirmation):
-    """Классическое подтверждение: закрытие следующей свечи выше/ниже паттерна"""
+    """Классическое подтверждение: закрытие следующей свечи выше/ниже паттерна"""    
     async def check(self, df, state) -> bool:
         last_close = df['close'].iloc[-1]
         prev_close = state['close']
@@ -77,8 +115,28 @@ class MorrisConfirmation(Confirmation):
             return last_close > prev_close
         return last_close < prev_close
     
-    def draw(self, df):
-        pass
+    def draw(self, df, state, ticker, tf):
+        plot_df = df.iloc[-10:].copy()
+        
+        plot_df['datetime'] = pd.to_datetime(plot_df['datetime'])
+        plot_df.set_index('datetime', inplace=True)
+        
+        plot_df['marker_up'] = np.nan
+        
+        plot_df['marker_up'].iloc[-1] = state['close'] * 0.998
+
+        apd = mpf.make_addplot(plot_df['marker_up'], type='scatter', 
+                                         markersize=120, marker='^', color='blue')
+        
+        file_name = f"Trading/Graf/Conf_{ticker}_{tf}_{state['pattern']}_chart.png"
+        mpf.plot(plot_df, type='candle', style='charles',
+                 title=f"Confirmation of pattern: {state['pattern']}",
+                 addplot=apd, savefig=file_name)
+        
+        print(f"✅ График подтверждения для {state['pattern']} сохранен в {file_name}")
+        return file_name
+
+
 
 class LevelConfirmation(Confirmation):
     """Подтверждение по уровням: цена коснулась или находится рядом с S/R"""
@@ -98,7 +156,7 @@ class StateManager:
         # Критерии и их веса
         self.criteria = {
             MorrisConfirmation(weight=1): "Подтверждение по Моррису",
-            LevelConfirmation(weight=2): "Касание уровня S/R",
+            #LevelConfirmation(weight=2): "Касание уровня S/R",
         }
 
     async def process_tick(self, ticker, tf, df, notifier):
@@ -106,21 +164,22 @@ class StateManager:
         if key not in self.pending: return
         
         state = self.pending[key]
+
         # Уменьшаем время жизни
         state['TTL'] -= 1
-        current_score = 0
         achieved_new = []
 
         for conf_obj, label in self.criteria.items():
             if label not in state['confirmation']:
                 if await conf_obj.check(df, state):
-                    current_score += conf_obj.weight
+                    state['score'] += conf_obj.weight
                     state['confirmation'].append(label)
 
-        if current_score > 0 and state['TTL'] > 0:
-            await notifier.send_confirmation_update(
-                ticker, state['pattern'], tf, current_score, state['confirmation']
-            )
+                    if state['TTL'] > 0:
+                        file = conf_obj.draw(df, state, ticker, tf)
+                        await notifier.send_confirmation_update(
+                            ticker, state['pattern'], tf, state['score'], state['confirmation'], file
+                        )
             
         # Сигнал отработал    
         if state['TTL'] == 0:
@@ -138,6 +197,7 @@ class StateManager:
             'type': type, 
             'close': data_close,
             'TTL': lifetime,
+            'score': 0,
             'confirmation': []
             }
 
@@ -424,7 +484,7 @@ async def get_candles(ticker_name, interval='1h', limit = 100, retries=3):
 
 async def scan(tickers, patterns_dict, notifier, state_manager: StateManager, time_frame='1h'):
 
-    print(f"🚀 Запуск сканера подтвержденных сигналов...")
+    print(f"🚀 Запуск сканера подтвержденных сигналов... [{time_frame}]")
     
     for ticker in tickers:
         df = await get_candles(ticker, interval=time_frame, limit=80)
@@ -437,8 +497,11 @@ async def scan(tickers, patterns_dict, notifier, state_manager: StateManager, ti
         for pattern, p_type in patterns_dict.items():
             signals = pattern.check_pattorn(df)
             if signals.iloc[-1]:
-                if f"{ticker}_{time_frame}" in state_manager.pending:
-                    continue 
+                ticker_key = f"{ticker}_{time_frame}"
+                
+                if ticker_key in state_manager.pending:
+                    if state_manager.pending[ticker_key]['pattern'] == pattern.name:
+                        continue 
                 print(f"🚨 СИГНАЛ! {pattern.name} по {ticker}")
                 
                 chart_path = pattern.draw(df)
@@ -447,7 +510,7 @@ async def scan(tickers, patterns_dict, notifier, state_manager: StateManager, ti
                 state_manager.add_pattern(
                     ticker, time_frame, pattern.name, p_type, df.iloc[-1]['close'], lifetime=4
                 )
-                
+                print(state_manager.pending)
         await asyncio.sleep(0.5)
         
     print(f'{time_frame} проверен!')
