@@ -1,0 +1,136 @@
+from abc import ABC, abstractmethod
+import pandas as pd
+import time
+from datetime import datetime, timedelta
+from moexalgo import Ticker
+import pandas_ta as ta
+import mplfinance as mpf
+import numpy as np
+import asyncio
+from aiogram import Bot
+from aiogram.types import FSInputFile
+from aiogram.client.session.aiohttp import AiohttpSession
+from typing import Callable
+
+from CandlePower02 import get_candles
+
+class LevelDetector:
+    def __init__(self, window, sensitivity):
+        self.window = window
+        self.sensitivity = sensitivity
+        
+    def get_levels(self, df: pd.DataFrame) -> tuple[dict, dict]:
+        
+        df['is_min'] = df['low'] == df['low'].rolling(window=self.window*2+1, center=True).min()
+    
+        df['is_max'] = df['high'] == df['high'].rolling(window=self.window*2+1, center=True).max()
+    
+        supports = df[df['is_min']]['low'].reset_index().values.tolist() #[[index, level], ...]
+        resistances = df[df['is_max']]['high'].reset_index().values.tolist()
+    
+        score_supports = self.cluster_levels(supports)
+        score_resistances = self.cluster_levels(resistances)
+        
+        return self.find_mirro(score_supports, score_resistances)
+    
+    def cluster_levels(self, points: list) -> list:
+        
+        levels = {}
+        
+        for i, point in points:
+            found_nearby = False
+            for level_price in list(levels.items()):
+                if abs(point - level_price[0]) / level_price[0] <= self.sensitivity:
+                    levels[level_price[0]][0] += 1
+                    levels[level_price[0]][1] = i
+                    found_nearby = True
+                    break
+            
+            if not found_nearby:
+                #[1 касание, индекс этой свечи]
+                levels[point] = [1, i]
+            
+        #{цена: [баллы, последний_индекс]}
+        return {p: [t[0] // 2, t[1]] for p, t in levels.items() if t[0] >= 2}
+    
+    def find_mirro(self, score1: dict, score2: dict) -> tuple[dict, dict]:
+        
+        #разные типы (поддержка / сопротивление)
+        levels1 = list(score1.keys())
+        levels2 = list(score2.keys())
+            
+        s1 = score1.copy()
+        s2 = score2.copy()
+
+        
+        for p1 in levels1:
+            for p2 in levels2:
+                #учитывание погрешности
+                if abs(p1 - p2) / p1 <= self.sensitivity:
+                    total_score = s1[p1][0] + s2[p2][0] + 2
+                    
+                    if s1[p1][1] > s2[p2][1]:
+                        s1[p1][0] = total_score
+                        if p2 in s2: 
+                            del s2[p2]
+                    else:
+                        s2[p2][0] = total_score
+                        if p1 in s1: 
+                            del s1[p1]
+                    break 
+        
+        return s1, s2
+
+    def prepare_hlines(self, final_levels: tuple[dict, dict]) -> dict:
+
+        s_dict, r_dict = final_levels
+    
+        hlines_prices = []
+        hlines_colors = []
+        hlines_widths = []
+
+        #Обрабатываем поддержки (зеленые)
+        for price, data in s_dict.items():
+            score = data[0]
+            hlines_prices.append(price)
+            hlines_colors.append('green')
+            #Толщина зависит от баллов (минимум 1, максимум 4)
+            hlines_widths.append(min(score, 4))
+
+        #Обрабатываем сопротивления (красные)
+        for price, data in r_dict.items():
+            score = data[0]
+            hlines_prices.append(price)
+            hlines_colors.append('red')
+            hlines_widths.append(min(score, 4))
+
+        return dict(hlines=hlines_prices, 
+                    colors=hlines_colors, 
+                    linewidths=hlines_widths, 
+                    linestyle='--')
+    
+    def draw_levels(self, df, ticker, tf, final_levels, pattern_name="Signal"):
+        
+        plot_df = df.iloc[-50:].copy()
+        plot_df['datetime'] = pd.to_datetime(plot_df['datetime'])
+        plot_df.set_index('datetime', inplace=True)
+
+        hlines_config = self.prepare_hlines(final_levels)
+
+        file_name = f"Trading/Graf/{ticker}_{tf}_levels.png"
+    
+        mpf.plot(plot_df, type='candle', style='charles',
+                title=f"{ticker} {tf} | Levels Analysis",
+                hlines=hlines_config,
+                savefig=file_name,
+                tight_layout=True)
+    
+        return file_name
+    
+if __name__ == '__main__':
+    df = asyncio.run(get_candles(ticker_name='SBER'))
+    
+    level = LevelDetector(10, 0.003)
+    supports, resistances = level.get_levels(df)
+    
+    level.draw_levels(df, 'SBER', '1h', (supports, resistances))
