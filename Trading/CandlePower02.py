@@ -513,9 +513,8 @@ async def scan(tickers, patterns_dict, notifier, state_manager: StateManager, ti
         
     print(f'{time_frame} проверен!')
     
-async def multiscan(tickers, patterns_dict, notifier):
+async def multiscan(tickers, patterns_dict, notifier, state_manager):
     targets = list(notifier.timeframe_chats.keys())
-    state_manager = StateManager()
     
     tasks = []
     for tf in targets:
@@ -551,12 +550,13 @@ async def main():
     print("Бот-сканер запущен в режиме сервера.")
     print("Для ручной остановки нажмите Ctrl+C")
 
+    state_manager = StateManager()
     try:
         while True:
             current_time = datetime.now().strftime('%H:%M:%S')
             print(f"[{current_time}] Начинаю плановое сканирование...")
             
-            await multiscan(my_tickers, my_patterns_dict, notifier)
+            await multiscan(my_tickers, my_patterns_dict, notifier, state_manager)
 
             wait_time = 300
             print(f"Сканирование окончено. Сон {wait_time//60} мин...")

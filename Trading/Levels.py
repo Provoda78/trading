@@ -18,16 +18,29 @@ class LevelsTelegrammNotifier:
         self.timeframe_chats = timeframe_chats
         self.main_chat_id = main_chat_id
         
-    async def send_signal_levels(self, ticker, photo_path, timeframe):
+    async def send_signal_levels(self, ticker, photo_path, timeframe, supports, resistances):
         
         chat_id = self.timeframe_chats.get(timeframe)
         if not chat_id:
             print(f"⚠️ Чат для таймфрейма {timeframe} не настроен!")
             return
         
+        s_points = [str(v[0]) for v in supports.values()]
+        s_prices = [str(p) for p in supports.keys()]
+        r_points = [str(v[0]) for v in resistances.values()]
+        r_prices = [str(p) for p in resistances.keys()]
+        
+        score = ""
+        if s_points:
+            score += f"Цены:  {s_prices} 🟢 Поддержка: {', '.join(s_points)} б.\n"   
+        if r_points:
+            score += f"Цены: {r_prices} 🔴 Сопротивление: {', '.join(r_points)} б.\n"
+            
         tv_url = f"https://tradingview.com/symbols/RUS-{ticker}/"
         caption = (
+        f"🚨 <b>Обнаружены уровни!</b>\n\n"
         f"Акция: <b>{ticker}</b>\n"
+        f"{score}\n"
         f"🕒 ТФ: {timeframe}\n"
         f"📅 {datetime.now().strftime('%d.%m %H:%M')}\n\n"
         f"🔗 <a href='{tv_url}'>Открыть график на TradingView</a>")
@@ -134,7 +147,7 @@ class LevelDetector:
                 #Верхняя граница диапазона
                 hlines_prices.append(price + margin)
                 hlines_colors.append(color)
-                hlines_widths.append(0.5)
+                hlines_widths.append(min(score, 4))
                 hlines_styles.append(':')
                 
                 #Центральная линия (уровень)
@@ -146,7 +159,7 @@ class LevelDetector:
                 #Нижняя граница диапазона
                 hlines_prices.append(price - margin)
                 hlines_colors.append(color)
-                hlines_widths.append(0.5)
+                hlines_widths.append(min(score, 4))
                 hlines_styles.append(':')
 
         return dict(hlines=hlines_prices, 
@@ -156,7 +169,7 @@ class LevelDetector:
     
     def draw_levels(self, df, ticker, tf, final_levels, pattern_name="Signal"):
         
-        plot_df = df.iloc[-100:].copy()
+        plot_df = df.iloc[-80:].copy()
         plot_df['datetime'] = pd.to_datetime(plot_df['datetime'])
         plot_df.set_index('datetime', inplace=True)
 
@@ -179,10 +192,10 @@ async def scan_levels(tickers, time_frame, notifier):
         df = await get_candles(ticker, interval=time_frame, limit=80)
         
         supports, resistances = levels.get_levels(df)
-        if supports or resistances:
+        if len(supports) > 0 or len(resistances) > 0:
             print(f'Обнаружен уровень: [{ticker}_{time_frame}]!')
             file = levels.draw_levels(df, ticker, time_frame, (supports, resistances))
-            notifier.send_signal_levels(ticker, file, time_frame)
+            await notifier.send_signal_levels(ticker, file, time_frame, supports, resistances)
     
     await asyncio.sleep(0.5)
 
