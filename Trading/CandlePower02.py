@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-import time
 from datetime import datetime, timedelta
 from moexalgo import Ticker
 import random
@@ -11,7 +10,6 @@ import asyncio
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
-from typing import Callable
 
 class TelegramNotifier:
     def __init__(self, token, timeframe_chats, main_chat_id):
@@ -510,7 +508,7 @@ async def scan(tickers, patterns_dict, notifier, state_manager: StateManager, ti
                 state_manager.add_pattern(
                     ticker, time_frame, pattern.name, p_type, df.iloc[-1]['close'], lifetime=4
                 )
-                print(state_manager.pending)
+                print(f'Память на данный момент: {state_manager.pending}')
         await asyncio.sleep(0.5)
         
     print(f'{time_frame} проверен!')
