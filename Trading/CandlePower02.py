@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-from datetime import datetime, timedelta
-from moexalgo import Ticker
-import random
+from datetime import datetime
 import pandas_ta as ta
 import mplfinance as mpf
 import numpy as np
@@ -10,6 +8,21 @@ import asyncio
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
+
+from Get import get_candles
+
+import sys
+import os
+
+# Определяем путь к папке, где лежит текущий файл
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Добавляем её в пути поиска
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
+
+from Levels import LevelDetector
+
+
 
 class TelegramNotifier:
     def __init__(self, token, timeframe_chats, main_chat_id):
@@ -135,13 +148,24 @@ class MorrisConfirmation(Confirmation):
         return file_name
 
 
-
+levels = LevelDetector(10, 0.003)
 class LevelConfirmation(Confirmation):
     """Подтверждение по уровням: цена коснулась или находится рядом с S/R"""
     async def check(self, df, state) -> bool:
-        # Здесь будет логика dist_to_support_pct < 0.3
-        dist = df['dist_to_support_pct'].iloc[-1] if state['type'] == "bullish" else df['dist_to_res_pct'].iloc[-1]
-        return dist < 0.5 
+        supports, resistances = levels.get_levels(df)
+    
+        needed = supports if state['type'] else resistances
+        
+        current_price = state['close']
+        
+        for level_price, data in needed.items():
+            margin = level_price * levels.sensitivity
+            
+            if (level_price - margin) <= current_price <= (level_price + margin):
+                self.weight = data[0]
+                return True
+                
+        return False
     
     def draw(self, df):
         pass
@@ -154,7 +178,7 @@ class StateManager:
         # Критерии и их веса
         self.criteria = {
             MorrisConfirmation(weight=1): "Подтверждение по Моррису",
-            #LevelConfirmation(weight=2): "Касание уровня S/R",
+            LevelConfirmation(weight=2): "Касание уровня S/R",
         }
 
     async def process_tick(self, ticker, tf, df, notifier):
@@ -428,56 +452,6 @@ class Three_white_soldiers(candel):
             (d['open'] < d['close'].shift(1)) &
             (d['upper_shadow'] < d['body_size'] * 0.2)
         )
-
-
-#Получаем данные
-async def get_candles(ticker_name, interval='1h', limit = 100, retries=3):
-        
-    base_delay = 2 #начальная задержка
-    
-    for attempt in range(retries):  
-              
-        try:
-            tc = Ticker(ticker_name)
-            
-            end_date = datetime.now()
-            if interval == '1min':
-                start_date = end_date - timedelta(minutes=limit * 2) #запас, так как не учтено время биржы
-            elif interval == '15min':
-                start_date = end_date - timedelta(minutes=limit * 20)
-            elif interval == '1h':
-                start_date = end_date - timedelta(days=limit // 6)
-            else:
-                start_date = end_date - timedelta(days=limit * 2)
-                
-            data = tc.candles(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), period=interval)
-
-            df = pd.DataFrame(data)
-
-            if df.empty:
-                print(f"[!] Данные для {ticker_name} отсутствуют (пустой ответ).")
-                return pd.DataFrame()
-            
-            #Если свечей больше limit
-            df = df.tail(limit)
-            df = df.rename(columns={'begin': 'datetime'})
-                
-            return df
-        
-        except Exception as e:
-            
-            print(f"ERROR: {e}")
-            
-            if "not found" in str(e) or "NoneType" in str(e):
-                print(f"[!] Тикер {ticker_name} неактивен или данные недоступны.")
-                return pd.DataFrame()
-
-            jitter = random.uniform(0, 1) 
-            wait_time = (base_delay * (2 ** attempt)) + jitter
-            print(f"[*] Сбой сети при загрузке {ticker_name}. Попытка {attempt + 1}/{retries}...")
-            await asyncio.sleep(wait_time)
-                
-    return pd.DataFrame()
 
 
 async def scan(tickers, patterns_dict, notifier, state_manager: StateManager, time_frame='1h'):

@@ -7,10 +7,10 @@ from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
 
-from CandlePower02 import get_candles
+from Get import get_candles
 
 class LevelsTelegrammNotifier:
-    def __init__(self, token, timeframe_chats, main_chat_id):
+    def __init__(self, token: int, timeframe_chats: list, main_chat_id: int):
         session = AiohttpSession(proxy="http://127.0.0.1:12334")
         
         #Передаем сессию в объект Bot
@@ -18,7 +18,11 @@ class LevelsTelegrammNotifier:
         self.timeframe_chats = timeframe_chats
         self.main_chat_id = main_chat_id
         
-    async def send_signal_levels(self, ticker, photo_path, timeframe, supports, resistances):
+    async def send_signal_levels(self, ticker: str, 
+                                 photo_path: str, 
+                                 timeframe: str, 
+                                 supports:dict, 
+                                 resistances: dict):
         
         chat_id = self.timeframe_chats.get(timeframe)
         if not chat_id:
@@ -61,7 +65,7 @@ class LevelsTelegrammNotifier:
             print(f"Ошибка отправки в Telegram: {e}")
 
 class LevelDetector:
-    def __init__(self, window, sensitivity):
+    def __init__(self, window: int, sensitivity: float):
         self.window = window
         self.sensitivity = sensitivity
         
@@ -167,9 +171,13 @@ class LevelDetector:
                     linewidths=hlines_widths, 
                     linestyle=hlines_styles)
     
-    def draw_levels(self, df, ticker, tf, final_levels, pattern_name="Signal"):
+    def draw_levels(self, df: pd.DataFrame, 
+                    ticker: str,
+                    tf: str, 
+                    final_levels: tuple[dict, dict], 
+                    pattern_name="Signal") -> str:
         
-        plot_df = df.iloc[-80:].copy()
+        plot_df = df.iloc[-100:].copy()
         plot_df['datetime'] = pd.to_datetime(plot_df['datetime'])
         plot_df.set_index('datetime', inplace=True)
 
@@ -185,11 +193,11 @@ class LevelDetector:
     
         return file_name
     
-async def scan_levels(tickers, time_frame, notifier):
+async def scan_levels(tickers: list, time_frame: str, notifier):
     levels = LevelDetector(10, 0.003)
     
     for ticker in tickers:
-        df = await get_candles(ticker, interval=time_frame, limit=80)
+        df = await get_candles(ticker, interval=time_frame, limit=100)
         
         supports, resistances = levels.get_levels(df)
         if len(supports) > 0 or len(resistances) > 0:
@@ -199,7 +207,7 @@ async def scan_levels(tickers, time_frame, notifier):
     
     await asyncio.sleep(0.5)
 
-async def multiscan_levels(tickers, notifier):
+async def multiscan_levels(tickers: list, notifier):
     tasks = []
     time_frames = list(notifier.timeframe_chats.keys())
     
