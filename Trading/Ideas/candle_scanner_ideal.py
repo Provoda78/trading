@@ -74,9 +74,7 @@ log = logging.getLogger(__name__)
 class Config:
     """Центральное место для всех настроек сканера."""
 
-    telegram_token: str = field(
-        default_factory=lambda: os.getenv("TELEGRAM_TOKEN", "")
-    )
+    telegram_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_TOKEN", ""))
     telegram_chat_id: str = field(
         default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", "")
     )
@@ -102,9 +100,7 @@ class Config:
 
     def __post_init__(self) -> None:
         if not self.telegram_token:
-            log.warning(
-                "TELEGRAM_TOKEN не задан. Создайте файл .env с токеном бота."
-            )
+            log.warning("TELEGRAM_TOKEN не задан. Создайте файл .env с токеном бота.")
         if not self.telegram_chat_id:
             log.warning("TELEGRAM_CHAT_ID не задан.")
 
@@ -340,7 +336,9 @@ class CandlePattern(ABC):
         plot_df["datetime"] = pd.to_datetime(plot_df["datetime"])
         plot_df = plot_df.set_index("datetime").iloc[-30:]
 
-        plot_df["marker_up"] = np.where(signals.reindex(plot_df.index), plot_df["low"] * 0.998, np.nan)
+        plot_df["marker_up"] = np.where(
+            signals.reindex(plot_df.index), plot_df["low"] * 0.998, np.nan
+        )
 
         apds = []
         if plot_df["marker_up"].notna().any():
@@ -370,6 +368,7 @@ class CandlePattern(ABC):
 # ---------------------------------------------------------------------------
 # Конкретные паттерны
 # ---------------------------------------------------------------------------
+
 
 class Hammer(CandlePattern):
     """
@@ -630,6 +629,7 @@ class ThreeWhiteSoldiers(CandlePattern):
 # Визуализация (процедурный сканер)
 # ---------------------------------------------------------------------------
 
+
 def build_signal_chart(
     df: pd.DataFrame,
     ticker: str,
@@ -683,9 +683,7 @@ def build_signal_chart(
         )
     )
 
-    fig.add_vline(
-        x=signal_time, line_width=1, line_dash="dash", line_color="white"
-    )
+    fig.add_vline(x=signal_time, line_width=1, line_dash="dash", line_color="white")
 
     is_bullish_pattern = any(
         kw in pattern_name.lower()
@@ -720,6 +718,7 @@ def build_signal_chart(
 # ---------------------------------------------------------------------------
 # Анализ паттернов (единая функция без дублирования)
 # ---------------------------------------------------------------------------
+
 
 def analyze_patterns_at_index(
     df: pd.DataFrame,
@@ -772,13 +771,26 @@ def analyze_patterns_at_index(
             found.append("Hammer (Молот)")
         if c_upper >= c_body * 2 and c_lower <= c_range * 0.1 and c_body > 0:
             found.append("Inverted Hammer (Перевернутый молот)")
-        if (c_close > c_open and p_close < p_open
-                and c_body_high >= p_body_high and c_body_low <= p_body_low):
+        if (
+            c_close > c_open
+            and p_close < p_open
+            and c_body_high >= p_body_high
+            and c_body_low <= p_body_low
+        ):
             found.append("Bullish Engulfing (Бычье поглощение)")
-        if (p_close < p_open and c_body_high <= p_body_high
-                and c_body_low >= p_body_low and p_body > c_body):
+        if (
+            p_close < p_open
+            and c_body_high <= p_body_high
+            and c_body_low >= p_body_low
+            and p_body > c_body
+        ):
             found.append("Bullish Harami (Бычье харами)")
-        if p_close < p_open and c_close > c_open and c_open < p_close and c_close > p_mid:
+        if (
+            p_close < p_open
+            and c_close > c_open
+            and c_open < p_close
+            and c_close > p_mid
+        ):
             found.append("Piercing Line (Просвет в облаках)")
 
     elif c_close > ema:
@@ -787,13 +799,26 @@ def analyze_patterns_at_index(
             found.append("Hanging Man (Висельник)")
         if c_upper >= c_body * 2 and c_lower <= c_range * 0.1 and c_body > 0:
             found.append("Shooting Star (Падающая звезда)")
-        if (c_close < c_open and p_close > p_open
-                and c_body_high >= p_body_high and c_body_low <= p_body_low):
+        if (
+            c_close < c_open
+            and p_close > p_open
+            and c_body_high >= p_body_high
+            and c_body_low <= p_body_low
+        ):
             found.append("Bearish Engulfing (Медвежье поглощение)")
-        if (p_close > p_open and c_body_high <= p_body_high
-                and c_body_low >= p_body_low and p_body > c_body):
+        if (
+            p_close > p_open
+            and c_body_high <= p_body_high
+            and c_body_low >= p_body_low
+            and p_body > c_body
+        ):
             found.append("Bearish Harami (Медвежье харами)")
-        if p_close > p_open and c_close < c_open and c_open > p_close and c_close < p_mid:
+        if (
+            p_close > p_open
+            and c_close < c_open
+            and c_open > p_close
+            and c_close < p_mid
+        ):
             found.append("Dark Cloud Cover (Завеса из тёмных облаков)")
 
     # Нейтральный паттерн
@@ -806,6 +831,7 @@ def analyze_patterns_at_index(
 # ---------------------------------------------------------------------------
 # Сканер в реальном времени
 # ---------------------------------------------------------------------------
+
 
 async def run_realtime_scanner(config: Config) -> None:
     """
@@ -842,9 +868,9 @@ async def run_realtime_scanner(config: Config) -> None:
                     if df.empty:
                         continue
 
-                    df["ema10"] = df["close"].ewm(
-                        span=config.ema_period, adjust=False
-                    ).mean()
+                    df["ema10"] = (
+                        df["close"].ewm(span=config.ema_period, adjust=False).mean()
+                    )
 
                     # Анализируем последнюю ЗАКРЫТУЮ свечу (предпоследняя строка)
                     check_idx = len(df) - 2
@@ -860,7 +886,13 @@ async def run_realtime_scanner(config: Config) -> None:
                         if last_alerts.get(key) == candle_time:
                             continue  # Уже отправляли этот сигнал
 
-                        log.info("СИГНАЛ: %s | %s | %s @ %s", ticker, tf, pattern, candle_time)
+                        log.info(
+                            "СИГНАЛ: %s | %s | %s @ %s",
+                            ticker,
+                            tf,
+                            pattern,
+                            candle_time,
+                        )
 
                         image_bytes = build_signal_chart(
                             df, ticker, tf, pattern, candle_time
@@ -893,6 +925,7 @@ async def run_realtime_scanner(config: Config) -> None:
 # Бэктест по истории
 # ---------------------------------------------------------------------------
 
+
 def run_backtest(config: Config, days_back: int = 3) -> None:
     """
     Проходит по всей истории за последние days_back дней,
@@ -920,9 +953,7 @@ def run_backtest(config: Config, days_back: int = 3) -> None:
             if df.empty:
                 continue
 
-            df["ema10"] = df["close"].ewm(
-                span=config.ema_period, adjust=False
-            ).mean()
+            df["ema10"] = df["close"].ewm(span=config.ema_period, adjust=False).mean()
 
             # Пропускаем первые ema_period свечей (прогрев EMA)
             for i in range(config.ema_period, len(df)):
@@ -936,7 +967,10 @@ def run_backtest(config: Config, days_back: int = 3) -> None:
                 for pattern in patterns:
                     log.info(
                         "Найдено в истории: %s %s %s @ %s",
-                        ticker, tf, pattern, candle_time,
+                        ticker,
+                        tf,
+                        pattern,
+                        candle_time,
                     )
 
                     image_bytes = build_signal_chart(
@@ -953,7 +987,9 @@ def run_backtest(config: Config, days_back: int = 3) -> None:
                         f"⏰ Время: `{candle_time.strftime('%d.%m %H:%M')}`"
                     )
 
-                    url = f"https://api.telegram.org/bot{config.telegram_token}/sendPhoto"
+                    url = (
+                        f"https://api.telegram.org/bot{config.telegram_token}/sendPhoto"
+                    )
                     _requests.post(
                         url,
                         data={
