@@ -1,0 +1,8 @@
+cd /home/oleg/Документы/trading
+
+export TRADING_TELEGRAM_TOKEN="8715766790:AAFQd7LOY2qOqvxgTaMKz7rJbEuM9t5VrZc"
+export TRADING_MAIN_CHAT_ID="-1003851510557"
+export TRADING_TIMEFRAME_CHATS='{"15min":2,"1h":3,"1D":4}'
+export TRADING_TICKERS="SBER,GAZP,LKOH,NVTK,MGNT,ROSN,T,IMOEX"
+
+.venv/bin/python Trading/levels/__main__.py

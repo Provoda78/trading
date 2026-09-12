@@ -56,3 +56,61 @@
 29.03.2026 12:35:44 | INFO | kaleido.kaleido | Exiting Kaleido/Choreo
 29.03.2026 12:36:13 | INFO | choreographer.utils._tmpfile | TemporaryDirectory.cleanup() worked.
 29.03.2026 12:36:13 | INFO | choreographer.utils._tmpfile | shutil.rmtree worked.
+12.09.2026 17:13:56 | WARNING | __main__ | TELEGRAM_TOKEN не задан. Создайте файл .env с токеном бота.
+12.09.2026 17:13:56 | WARNING | __main__ | TELEGRAM_CHAT_ID не задан.
+12.09.2026 17:13:56 | INFO | __main__ | --- ЗАПУСК БЭКТЕСТА ЗА 2 ДНЯ ---
+12.09.2026 17:13:56 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/securities/SBER.json "HTTP/1.1 200 OK"
+12.09.2026 17:13:56 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=0 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=1000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=1500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=2000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=2500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=3000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=3500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=4000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=4500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:57 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=5000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=5500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=6000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=6500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=7000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=7500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=8000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=8500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=9000 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | httpx | HTTP Request: GET https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?from=2026-08-11&till=2026-09-12&interval=1&start=9500 "HTTP/1.1 200 OK"
+12.09.2026 17:13:58 | INFO | __main__ | Загружено 685 свечей для SBER (15min).
+12.09.2026 17:13:58 | INFO | __main__ | Найдено в истории: SBER 15min Doji (Доджи) @ 2026-08-11 09:45:00
+12.09.2026 17:13:59 | INFO | choreographer.browsers.chromium | Chromium init'ed with kwargs {}
+12.09.2026 17:13:59 | INFO | choreographer.browsers.chromium | Found chromium path: /home/oleg/Документы/trading/.venv/lib/python3.13/site-packages/choreographer/cli/browser_exe/chrome-linux64/chrome
+12.09.2026 17:13:59 | INFO | choreographer.utils._tmpfile | Temp directory created: /tmp/tmpzivb1rsl.
+12.09.2026 17:13:59 | INFO | choreographer.browser_async | Opening browser.
+12.09.2026 17:13:59 | INFO | choreographer.utils._tmpfile | Temp directory created: /tmp/tmp0jsphhr8.
+12.09.2026 17:13:59 | INFO | choreographer.browsers.chromium | Temporary directory at: /tmp/tmp0jsphhr8
+12.09.2026 17:14:00 | INFO | kaleido.kaleido | Conforming 1 to file:///tmp/tmpzivb1rsl/index.html
+12.09.2026 17:14:00 | INFO | kaleido.kaleido | Waiting on all navigates
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | All navigates done, putting them all in queue.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Getting tab from queue (has 1)
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Got 8EB9
+12.09.2026 17:14:02 | INFO | kaleido._kaleido_tab | Processing SBER_15min__Doji_.png
+12.09.2026 17:14:02 | INFO | kaleido._kaleido_tab | Sending big command for SBER_15min__Doji_.png.
+12.09.2026 17:14:02 | INFO | kaleido._kaleido_tab | Sent big command for SBER_15min__Doji_.png.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Reloading tab 8EB9 before return.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Putting tab 8EB9 back (queue size: 0).
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Waiting for all cleanups to finish.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Exiting Kaleido
+12.09.2026 17:14:02 | INFO | choreographer.browser_async | Closing browser.
+12.09.2026 17:14:02 | INFO | choreographer.browser_async | Closing browser.
+12.09.2026 17:14:02 | INFO | choreographer.utils._tmpfile | TemporaryDirectory.cleanup() worked.
+12.09.2026 17:14:02 | INFO | choreographer.utils._tmpfile | shutil.rmtree worked.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Cancelling tasks.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Exiting Kaleido/Choreo
+12.09.2026 17:14:02 | INFO | choreographer.utils._tmpfile | TemporaryDirectory.cleanup() worked.
+12.09.2026 17:14:02 | INFO | choreographer.utils._tmpfile | shutil.rmtree worked.
+12.09.2026 17:14:02 | INFO | choreographer.utils._tmpfile | TemporaryDirectory.cleanup() worked.
+12.09.2026 17:14:02 | INFO | choreographer.utils._tmpfile | shutil.rmtree worked.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Cancelling tasks.
+12.09.2026 17:14:02 | INFO | kaleido.kaleido | Exiting Kaleido/Choreo
+12.09.2026 17:14:33 | INFO | choreographer.utils._tmpfile | TemporaryDirectory.cleanup() worked.
+12.09.2026 17:14:33 | INFO | choreographer.utils._tmpfile | shutil.rmtree worked.

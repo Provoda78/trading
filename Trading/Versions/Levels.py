@@ -1,13 +1,20 @@
 import pandas as pd
 from datetime import datetime
 import mplfinance as mpf
-import numpy as np
 import asyncio
+import os
+import sys
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
 
-from Get import get_candles
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+GRAPH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Graf")
+os.makedirs(GRAPH_DIR, exist_ok=True)
+
+from Trading.Versions.Get import get_candles
 
 
 class LevelsTelegrammNotifier:
@@ -201,7 +208,7 @@ class LevelDetector:
 
         hlines_config = self.prepare_hlines(final_levels)
 
-        file_name = f"Trading/Graf/{ticker}_levels.png"
+        file_name = os.path.join(GRAPH_DIR, f"{ticker}_levels.png")
 
         mpf.plot(
             plot_df,
@@ -282,5 +289,5 @@ async def main():
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except:
-        pass
+    except Exception as error:
+        print(f"Ошибка запуска бота уровней: {error}")

@@ -9,10 +9,16 @@ from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
 
-from Get import get_candles
-
 import sys
 import os
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+GRAPH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Graf")
+os.makedirs(GRAPH_DIR, exist_ok=True)
+
+from Trading.Versions.Get import get_candles
 
 # Определяем путь к папке, где лежит текущий файл
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +26,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
-from Levels import LevelDetector
+from Trading.Versions.Levels import LevelDetector
 
 
 class TelegramNotifier:
@@ -149,7 +155,10 @@ class MorrisConfirmation(Confirmation):
             color="blue",
         )
 
-        file_name = f"Trading/Graf/Conf_{ticker}_{tf}_{state['pattern']}_chart.png"
+        file_name = os.path.join(
+            GRAPH_DIR,
+            f"Conf_{ticker}_{tf}_{state['pattern']}_chart.png",
+        )
         mpf.plot(
             plot_df,
             type="candle",
@@ -343,7 +352,7 @@ class candel(ABC):
                 )
             )
 
-        file_name = f"Trading/Graf/{self.name}_chart.png"
+        file_name = os.path.join(GRAPH_DIR, f"{self.name}_chart.png")
         mpf.plot(
             view_plot.iloc[-30:],
             type="candle",
