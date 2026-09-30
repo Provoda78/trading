@@ -79,6 +79,7 @@ if __name__ == '__main__':
     model.fit(X, y)
     weights = model.weights
     predict = model.predict_probability(X)
+    model.history()
         
     print(f'Вероятность: {predict}', sep='\n')
     print(f'Веса: {weights}')
