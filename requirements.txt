@@ -3,11 +3,13 @@ moexalgo
 
 pandas
 numpy
+scikit-learn
 
 TA-Lib
 
 # Визуализация
 plotly
+matplotlib
 
 python-telegram-bot
 python-dotenv
