@@ -4,6 +4,7 @@ moexalgo
 pandas
 numpy
 scikit-learn
+hmmlearn
 
 TA-Lib
 
