@@ -3,100 +3,268 @@ from itertools import product
 from abc import abstractmethod, ABC
 
 class BaseHMM(ABC):
-    def __init__(self, n_states, startprob, transmat, random_state):
-        self.n_states = n_states
+    
+    @abstractmethod
+    def forward(self, obs, distributions=None):
+        pass
+    
+    @abstractmethod
+    def backward(self, obs, c, distributions=None):
+        pass
+    
+    @abstractmethod
+    def e_step(self, obs, distributions=None):
+        pass
+    
+    @abstractmethod
+    def m_step(self, sequences, e_results):
+        pass
+
+    @abstractmethod
+    def fit(self, sequences, n_iter=100, tol=1e-4):
+        pass
+    
+    @abstractmethod
+    def predict(self, obs):
+        pass
+
+class HMM(BaseHMM):
+    """HMM с дискретными наблюдениями 0..n_symbols-1."""
+
+    def __init__(self, n_states, n_symbols, startprob=None,
+                 transmat=None, emissionprob=None, random_state=None):
+        
+        self.n_states = n_states #число скрытых состояний N
+        self.n_symbols = n_symbols #размер алфавита наблюдений K
         self.rng = np.random.default_rng(random_state)
+
         self.pi = self._init_dist((n_states,), startprob, "startprob")
         self.A = self._init_dist((n_states, n_states), transmat, "transmat")
+        self.B = self._init_dist((n_states, n_symbols), emissionprob, "emissionprob")
 
     def _init_dist(self, shape, given, name):
         if given is None:
-            values = self.rng.random(shape) + 0.1
+            M = self.rng.random(shape) + 0.1
         else:
-            values = np.array(given, dtype=float)
-            if values.shape != shape:
-                raise ValueError(f"{name}: ожидается форма {shape}, получена {values.shape}")
-            if np.any(values < 0):
+            M = np.array(given, dtype=float)
+            if M.shape != shape:
+                raise ValueError(f"{name}: ожидается форма {shape}, получена {M.shape}")
+            if np.any(M < 0):
                 raise ValueError(f"{name}: есть отрицательные вероятности")
-        values /= values.sum(axis=-1, keepdims=True)
-        return values
-
-    @abstractmethod
-    def _emission_probabilities(self, obs):
-        pass
-
-    @abstractmethod
-    def _log_emission_probabilities(self, obs):
-        pass
-
-    @abstractmethod
-    def _initialize_emissions(self, sequences):
-        pass
-
-    @abstractmethod
-    def _m_step_emissions(self, sequences, e_results):
-        pass
-
+        M /= M.sum(axis=-1, keepdims=True)
+        return M
+    
     def forward(self, obs, distributions=None):
+
         obs = np.asarray(obs)
         T = len(obs)
         N = self.n_states
-        if distributions is None:
-            distributions = self._emission_probabilities(obs)
 
         alpha = np.zeros((T, N))
         c = np.zeros(T)
 
-        alpha[0] = np.multiply(self.pi, distributions[0])
+        # t = 0: инициализация
+        if distributions is None:
+            distribution_0 = self.B[:, obs[0]]
+        else:
+            distribution_0 = distributions[0]
+        alpha[0] = np.multiply(self.pi, distribution_0)
         c[0] = np.sum(alpha[0])
         alpha[0] /= c[0]
 
+        # t = 1 .. T-1: рекуррентный шаг
         for t in range(1, T):
-            alpha[t] = (alpha[t-1] @ self.A) * distributions[t]
+            if distributions is None:
+                distribution_t = self.B[:, obs[t]]
+            else:
+                distribution_t = distributions[t]
+                            
+            alpha[t] = (alpha[t-1] @ self.A) * distribution_t  
             c[t] = np.sum(alpha[t])
             alpha[t] /= c[t]
 
         loglik = np.sum(np.log(c))
         return alpha, c, loglik
-
+    
     def backward(self, obs, c, distributions=None):
+    
         obs = np.asarray(obs)
         T = len(obs)
         N = self.n_states
-        if distributions is None:
-            distributions = self._emission_probabilities(obs)
 
         beta = np.zeros((T, N))
+
+        # t = T-1: инициализация
         beta[T-1] = np.ones(N)
 
+        # t = T-2 .. 0: рекуррентный шаг справа налево
         for t in range(T-2, -1, -1):
-            beta[t] = self.A @ (beta[t+1] * distributions[t+1])
+            if distributions is None:
+                distribution = self.B[:, obs[t+1]]
+            else:
+                distribution = distributions[t+1]
+                            
+            beta[t] = self.A @ (beta[t+1] * distribution)
             beta[t] /= c[t+1]
 
         return beta
-
+    
     def e_step(self, obs, distributions=None):
+  
         obs = np.asarray(obs)
         T = len(obs)
         N = self.n_states
-        if distributions is None:
-            distributions = self._emission_probabilities(obs)
 
         alpha, c, loglik = self.forward(obs, distributions=distributions)
         beta = self.backward(obs, c, distributions=distributions)
+        
+        #gamma [T N]
         gamma = alpha * beta
 
         xi = np.zeros((T-1, N, N))
         for t in range(T-1):
-            xi[t] = (
-                alpha[t][:, None]
-                * self.A
-                * (distributions[t+1] * beta[t+1])
-            )
+            if distributions is None:
+                distribution = self.B[:, obs[t+1]]
+            else:
+                distribution = distributions[t+1]
+            
+            #xi[N-1 N N]
+            # xi_t(i,j) ~ alpha_t(i) * a_ij * b_j(o_{t+1}) * beta_{t+1}(j)
+            xi[t] = alpha[t][:, None] * self.A * (distribution * beta[t+1])
             xi[t] /= c[t+1]
 
         return gamma, xi, loglik
+    
+    def m_step(self, sequences, e_results):
+    
+        N, K = self.n_states, self.n_symbols
 
+        pi_acc = np.zeros(N)         # числитель Pi
+        xi_acc = np.zeros((N, N))    # числиьель a_ij
+        gam_trans = np.zeros(N)      # знаменатель a_ij
+        emit_acc = np.zeros((N, K))  # числитель b_ij
+        gam_all = np.zeros(N)        # знаменатель b_ij
+
+        for obs, (gamma, xi, _) in zip(sequences, e_results):
+            obs = np.asarray(obs)
+
+            pi_acc += gamma[0]
+            xi_acc += np.sum(xi, axis=0)
+            gam_trans += np.sum(gamma[:-1], axis=0)
+            for k in range(K):
+                emit_acc[:, k] += np.sum(gamma[obs==k], axis=0)             
+            gam_all += np.sum(gamma, axis=0)
+
+        self.pi = pi_acc / len(sequences)
+        self.A = xi_acc / gam_trans[:, None]
+        self.B = emit_acc / gam_all[:, None]
+    
+    def fit(self, sequences, n_iter=100, tol=1e-4):
+        history = []
+        for i in range(n_iter):
+            e_results = [self.e_step(obs) for obs in sequences]
+            history.append(sum(r[2] for r in e_results))
+            self.m_step(sequences, e_results)
+            if i > 0 and abs(history[-1] - history[-2]) < tol:
+                break
+        return history
+    
+    def predict(self, obs):
+                obs = np.asarray(obs)
+                T = len(obs)
+                N = self.n_states
+        
+                with np.errstate(divide="ignore"):
+                    logpi = np.log(self.pi)
+                    logA = np.log(self.A)
+                    logB = np.log(self.B)
+        
+                delta = np.zeros((T, N))
+                psi = np.zeros((T, N), dtype=int)    # psi[t, j]: лучшее предыдущее состояние для (t, j)
+        
+                # t = 0: инициализация
+                delta[0] = logpi + logB[:, obs[0]]
+        
+                # t = 1 .. T-1: рекуррентный шаг
+                for t in range(1, T):
+                    scores = delta[t-1][:, None] + logA
+                    psi[t] = np.argmax(scores, axis=0)
+                    delta[t] = np.max(scores, axis=0) + logB[:, obs[t]]
+        
+                path = np.zeros(T, dtype=int)
+                path[T-1] = np.argmax(delta[T-1])
+                logprob = np.max(delta[T-1])
+                for t in range(T-2, -1, -1):
+                    path[t] = psi[t+1][path[t+1]]
+        
+                return path, logprob
+    
+class GaussianHMM(HMM):
+    def __init__(self, n_states, n_features, startprob=None, transmat=None,
+                 random_state=None, reg=1e-4):
+        super().__init__(
+            n_states,
+            n_features,
+            startprob=startprob,
+            transmat=transmat,
+            random_state=random_state,
+        )
+        self.D = n_features
+        self.reg = reg
+        self.means = None
+        self.covars = None
+
+    def init_emissions(self, sequences):
+        X = np.concatenate(sequences)
+        N, D = self.n_states, self.D
+
+        idx = self.rng.choice(len(X), size=N, replace=False)
+        self.means = X[idx].astype(float) # (N, D)
+
+        cov = np.atleast_2d(np.cov(X.T)) + self.reg * np.eye(D)
+        self.covars = np.tile(cov, (N, 1, 1)) # (N, D, D)
+
+        assert self.means.shape == (N, D)
+
+    def _emission(self, obs):
+        """Возвращает (T, N): [t, i] = N(obs[t]; means[i], covars[i])."""
+        return np.exp(self._log_emission(obs))
+
+    def _log_emission(self, obs):
+        T = len(obs)
+        logp = np.zeros((T, self.n_states))
+        for i in range(self.n_states):
+            diff = obs - self.means[i] # (T, D)
+
+            logp[:, i] = - 0.5 * (self.D * np.log(2 * np.pi) + 
+                                  np.linalg.slogdet(self.covars[i])[1] + 
+                                  np.sum(diff.T * np.linalg.solve(self.covars[i], diff.T), axis=0))
+            
+        return logp
+
+    def _m_step_emissions(self, sequences, e_results):
+        X = np.concatenate(sequences)
+        G = np.concatenate([r[0] for r in e_results])
+        Nk = G.sum(axis=0)
+    
+        self.means = G.T @ X / Nk[:, None]
+        for i in range(self.n_states):
+            diff = X - self.means[i]
+            self.covars[i] = ((G[:, i, None] * diff).T @ diff / Nk[i] 
+                              + self.reg * np.eye(self.D))
+            
+    def forward(self, obs, distributions=None):
+        eb = self._emission(obs) if distributions is None else distributions
+        return super().forward(obs, distributions=eb)
+        
+    def backward(self, obs, c, distributions=None):
+        eb = self._emission(obs) if distributions is None else distributions
+        return super().backward(obs, c, distributions=eb)
+        
+    def e_step(self, obs, distributions=None):
+        eb = self._emission(obs) if distributions is None else distributions
+        return super().e_step(obs, distributions=eb)   
+    
     def m_step(self, sequences, e_results):
         N = self.n_states
         pi_acc = np.zeros(N)
@@ -111,218 +279,46 @@ class BaseHMM(ABC):
         self.pi = pi_acc / len(sequences)
         self.A = xi_acc / gam_trans[:, None]
         self._m_step_emissions(sequences, e_results)
-
+    
     def fit(self, sequences, n_iter=100, tol=1e-4):
         history = []
-        self._initialize_emissions(sequences)
+        if self.means is None:
+            self.init_emissions(sequences)
+
         for i in range(n_iter):
             e_results = [self.e_step(obs) for obs in sequences]
-            history.append(sum(result[2] for result in e_results))
+            history.append(sum(r[2] for r in e_results))
             self.m_step(sequences, e_results)
             if i > 0 and abs(history[-1] - history[-2]) < tol:
                 break
         return history
-
-    def predict(self, obs):
-        obs = np.asarray(obs)
-        T = len(obs)
-        N = self.n_states
-
-        with np.errstate(divide="ignore"):
-            logpi = np.log(self.pi)
-            logA = np.log(self.A)
-        log_emissions = self._log_emission_probabilities(obs)
-
-        delta = np.zeros((T, N))
-        psi = np.zeros((T, N), dtype=int)
-        delta[0] = logpi + log_emissions[0]
-
-        for t in range(1, T):
-            scores = delta[t-1][:, None] + logA
-            psi[t] = np.argmax(scores, axis=0)
-            delta[t] = np.max(scores, axis=0) + log_emissions[t]
-
-        path = np.zeros(T, dtype=int)
-        path[T-1] = np.argmax(delta[T-1])
-        logprob = np.max(delta[T-1])
-        for t in range(T-2, -1, -1):
-            path[t] = psi[t+1][path[t+1]]
-
-        return path, logprob
-
-
-class CategoricalEmission:
-    def __init__(self, n_states, n_symbols, rng, emissionprob=None):
-        self.n_symbols = n_symbols
-        self.B = self._init_dist(
-            (n_states, n_symbols), emissionprob, "emissionprob", rng
-        )
-
-    @staticmethod
-    def _init_dist(shape, given, name, rng):
-        if given is None:
-            values = rng.random(shape) + 0.1
-        else:
-            values = np.array(given, dtype=float)
-            if values.shape != shape:
-                raise ValueError(f"{name}: ожидается форма {shape}, получена {values.shape}")
-            if np.any(values < 0):
-                raise ValueError(f"{name}: есть отрицательные вероятности")
-        values /= values.sum(axis=-1, keepdims=True)
-        return values
-
-    def probabilities(self, obs):
-        return self.B[:, obs].T
-
-    def log_probabilities(self, obs):
-        with np.errstate(divide="ignore"):
-            return np.log(self.probabilities(obs))
-
-    def initialize(self, sequences):
-        pass
-
-    def m_step(self, sequences, e_results):
-        n_states = self.B.shape[0]
-        emit_acc = np.zeros_like(self.B)
-        gam_all = np.zeros(n_states)
-
-        for obs, (gamma, _, _) in zip(sequences, e_results):
-            obs = np.asarray(obs)
-            for symbol in range(self.n_symbols):
-                emit_acc[:, symbol] += np.sum(gamma[obs == symbol], axis=0)
-            gam_all += np.sum(gamma, axis=0)
-
-        self.B = emit_acc / gam_all[:, None]
-
-
-class GaussianEmission:
-    def __init__(self, n_states, n_features, rng, reg=1e-4):
-        self.n_states = n_states
-        self.n_features = n_features
-        self.rng = rng
-        self.reg = reg
-        self.means = None
-        self.covars = None
-
-    def initialize(self, sequences):
-        X = np.concatenate(sequences)
-        N, D = self.n_states, self.n_features
-
-        idx = self.rng.choice(len(X), size=N, replace=False)
-        self.means = X[idx].astype(float)
-
-        cov = np.atleast_2d(np.cov(X.T)) + self.reg * np.eye(D)
-        self.covars = np.tile(cov, (N, 1, 1))
-
-        assert self.means.shape == (N, D)
-
-    def log_probabilities(self, obs):
-        T = len(obs)
-        logp = np.zeros((T, self.n_states))
-        for i in range(self.n_states):
-            diff = obs - self.means[i]
-            logp[:, i] = -0.5 * (
-                self.n_features * np.log(2 * np.pi)
-                + np.linalg.slogdet(self.covars[i])[1]
-                + np.sum(
-                    diff.T * np.linalg.solve(self.covars[i], diff.T), axis=0
-                )
-            )
-        return logp
-
-    def probabilities(self, obs):
-        return np.exp(self.log_probabilities(obs))
-
-    def m_step(self, sequences, e_results):
-        X = np.concatenate(sequences)
-        G = np.concatenate([result[0] for result in e_results])
-        Nk = G.sum(axis=0)
-
-        self.means = G.T @ X / Nk[:, None]
-        for i in range(self.n_states):
-            diff = X - self.means[i]
-            self.covars[i] = (
-                (G[:, i, None] * diff).T @ diff / Nk[i]
-                + self.reg * np.eye(self.n_features)
-            )
-
-class HMM(BaseHMM):
-    """HMM с дискретными наблюдениями 0..n_symbols-1."""
-
-    def __init__(self, n_states, n_symbols, startprob=None,
-                 transmat=None, emissionprob=None, random_state=None):
-        
-        super().__init__(n_states, startprob, transmat, random_state)
-        self.n_symbols = n_symbols
-        self.emission_model = CategoricalEmission(
-            n_states, n_symbols, self.rng, emissionprob
-        )
-
-    @property
-    def B(self):
-        return self.emission_model.B
-
-    @B.setter
-    def B(self, value):
-        self.emission_model.B = value
-
-    def _emission_probabilities(self, obs):
-        return self.emission_model.probabilities(obs)
-
-    def _log_emission_probabilities(self, obs):
-        return self.emission_model.log_probabilities(obs)
-
-    def _initialize_emissions(self, sequences):
-        self.emission_model.initialize(sequences)
-
-    def _m_step_emissions(self, sequences, e_results):
-        self.emission_model.m_step(sequences, e_results)
     
-class GaussianHMM(BaseHMM):
-    def __init__(self, n_states, n_features, startprob=None, transmat=None,
-                 random_state=None, reg=1e-4):
-        super().__init__(n_states, startprob, transmat, random_state)
-        self.n_features = n_features
-        self.D = n_features
-        self.emission_model = GaussianEmission(n_states, n_features, self.rng, reg)
-
-    @property
-    def means(self):
-        return self.emission_model.means
-
-    @means.setter
-    def means(self, value):
-        self.emission_model.means = value
-
-    @property
-    def covars(self):
-        return self.emission_model.covars
-
-    @covars.setter
-    def covars(self, value):
-        self.emission_model.covars = value
-
-    def init_emissions(self, sequences):
-        self.emission_model.initialize(sequences)
-
-    def _emission(self, obs):
-        return self.emission_model.probabilities(obs)
-
-    def _log_emission(self, obs):
-        return self.emission_model.log_probabilities(obs)
-
-    def _m_step_emissions(self, sequences, e_results):
-        self.emission_model.m_step(sequences, e_results)
-
-    def _emission_probabilities(self, obs):
-        return self.emission_model.probabilities(obs)
-
-    def _log_emission_probabilities(self, obs):
-        return self.emission_model.log_probabilities(obs)
-
-    def _initialize_emissions(self, sequences):
-        if self.means is None:
-            self.init_emissions(sequences)
+    def predict(self, obs):
+            obs = np.asarray(obs)
+            T = len(obs)
+            N = self.n_states
+            log_emissions = self._log_emission(obs)
+    
+            with np.errstate(divide="ignore"):
+                logpi = np.log(self.pi)
+                logA = np.log(self.A)
+    
+            delta = np.zeros((T, N))
+            psi = np.zeros((T, N), dtype=int)
+            delta[0] = logpi + log_emissions[0]
+    
+            for t in range(1, T):
+                scores = delta[t - 1][:, None] + logA
+                psi[t] = np.argmax(scores, axis=0)
+                delta[t] = np.max(scores, axis=0) + log_emissions[t]
+    
+            path = np.zeros(T, dtype=int)
+            path[T - 1] = np.argmax(delta[T - 1])
+            logprob = np.max(delta[T - 1])
+            for t in range(T - 2, -1, -1):
+                path[t] = psi[t + 1][path[t + 1]]
+    
+            return path, logprob
         
         
 def brute_force(m, obs):
